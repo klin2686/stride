@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -74,6 +75,7 @@ function TrendLine() {
 
 /* ════════════════════════════ DASHBOARD PAGE ═════════════════════════════ */
 export default function DashboardPage() {
+  const router = useRouter();
   const [navValue, setNavValue] = useState(0);
   const username = "username"; // Replace with dynamic value later
 
@@ -272,7 +274,11 @@ export default function DashboardPage() {
       {/* 6 · Bottom Navigation (fixed) */}
       <BottomNavigation
         value={navValue}
-        onChange={(_, newValue) => setNavValue(newValue)}
+        onChange={(_, newValue) => {
+          setNavValue(newValue);
+          if (newValue === 2) router.push("/profile");
+          // newValue === 1 → record (future)
+        }}
         showLabels
         sx={{
           position: "fixed",
