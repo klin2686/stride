@@ -632,7 +632,7 @@ export default function ProfilePage() {
         showLabels
         onChange={(_, newValue) => {
           if (newValue === 0) router.push("/dashboard");
-          // newValue === 1 → record (future)
+          if (newValue === 1) router.push("/record");
           // newValue === 2 → already on profile
         }}
         sx={{

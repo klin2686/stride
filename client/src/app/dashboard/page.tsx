@@ -276,8 +276,8 @@ export default function DashboardPage() {
         value={navValue}
         onChange={(_, newValue) => {
           setNavValue(newValue);
+          if (newValue === 1) router.push("/record");
           if (newValue === 2) router.push("/profile");
-          // newValue === 1 → record (future)
         }}
         showLabels
         sx={{
