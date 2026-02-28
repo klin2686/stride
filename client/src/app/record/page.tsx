@@ -948,9 +948,7 @@ export default function RecordPage() {
           {calibration === "complete" && (
             <CalibrationComplete
               onContinue={() => {
-                // TODO: Navigate to the active run screen
-                // For now, just log and stay on the page
-                console.log("Starting run…");
+                router.push("/run");
               }}
             />
           )}
