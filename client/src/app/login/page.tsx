@@ -56,7 +56,7 @@ export default function LoginPage() {
 
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" },
         body: JSON.stringify({ username: username.trim(), password }),
       });
 
