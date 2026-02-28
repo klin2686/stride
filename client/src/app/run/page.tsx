@@ -207,10 +207,12 @@ export default function RunPage() {
   /* ── Handlers ── */
   const handlePause = useCallback(() => {
     setStatus("paused");
+    fetch("http://172.31.89.83:8000/pause", { method: "POST" }).catch(() => {});
   }, []);
 
   const handleResume = useCallback(() => {
     setStatus("running");
+    fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
   }, []);
 
   const handleStopConfirm = useCallback(() => {
