@@ -8,7 +8,8 @@ import Typography from "@mui/material/Typography";
 import BottomNavigation from "@mui/material/BottomNavigation";
 import BottomNavigationAction from "@mui/material/BottomNavigationAction";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
-import CircleIcon from "@mui/icons-material/Circle";
+import RecordButton from "@mui/icons-material/RadioButtonChecked";
+import ProfileIcon from "@mui/icons-material/PersonOutlineOutlined";
 
 /* ───────────────────── Segmented Progress Bar ───────────────────── */
 function SegmentedProgressBar({
@@ -304,11 +305,11 @@ export default function Home() {
         />
         <BottomNavigationAction
           label="Record"
-          icon={<CircleIcon sx={{ fontSize: 28, color: "#1a1a1a" }} />}
+          icon={<RecordButton sx={{ fontSize: 28 }} />}
         />
         <BottomNavigationAction
           label="Profile"
-          icon={<CircleIcon sx={{ fontSize: 28, color: "#1a1a1a" }} />}
+          icon={<ProfileIcon sx={{ fontSize: 28 }} />}
         />
       </BottomNavigation>
     </Box>
