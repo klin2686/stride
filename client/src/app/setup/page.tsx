@@ -50,6 +50,12 @@ function StepIndicator({
   );
 }
 
+/* ───────────────────── Unit Conversion Helpers ──────────────────── */
+const lbsToKg = (lbs: number) => Math.round(lbs * 0.453592);
+const kgToLbs = (kg: number) => Math.round(kg / 0.453592);
+const inToCm = (inches: number) => Math.round(inches * 2.54);
+const cmToIn = (cm: number) => Math.round(cm / 2.54);
+
 /* ═══════════════════════════ SETUP PAGE ═════════════════════════════ */
 export default function SetupPage() {
   const router = useRouter();
@@ -65,6 +71,7 @@ export default function SetupPage() {
     handleSubmit,
     trigger,
     getValues,
+    setValue,
     clearErrors,
     formState: { errors },
   } = useForm<SetupFormData>({
@@ -407,7 +414,18 @@ export default function SetupPage() {
                   value={unitSystem}
                   exclusive
                   onChange={(_, val) => {
-                    if (val) setUnitSystem(val);
+                    if (val && val !== unitSystem) {
+                      const currentWeight = getValues("weight");
+                      const currentHeight = getValues("height");
+                      if (val === "metric") {
+                        if (currentWeight) setValue("weight", String(lbsToKg(Number(currentWeight))));
+                        if (currentHeight) setValue("height", String(inToCm(Number(currentHeight))));
+                      } else {
+                        if (currentWeight) setValue("weight", String(kgToLbs(Number(currentWeight))));
+                        if (currentHeight) setValue("height", String(cmToIn(Number(currentHeight))));
+                      }
+                      setUnitSystem(val);
+                    }
                   }}
                   sx={{
                     bgcolor: "#fff",

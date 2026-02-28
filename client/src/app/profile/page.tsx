@@ -40,6 +40,30 @@ interface ProfileFormData {
 
 type EditableField = keyof ProfileFormData | null;
 
+/* ───────────────────── Unit Conversion Helpers ──────────────────── */
+const lbsToKg = (lbs: number) => Math.round(lbs * 0.453592);
+const kgToLbs = (kg: number) => Math.round(kg / 0.453592);
+const inToCm = (inches: number) => Math.round(inches * 2.54);
+const cmToIn = (cm: number) => Math.round(cm / 2.54);
+
+function convertProfile(
+  data: ProfileFormData,
+  to: "imperial" | "metric"
+): ProfileFormData {
+  if (to === "metric") {
+    return {
+      ...data,
+      weight: data.weight ? String(lbsToKg(Number(data.weight))) : "",
+      height: data.height ? String(inToCm(Number(data.height))) : "",
+    };
+  }
+  return {
+    ...data,
+    weight: data.weight ? String(kgToLbs(Number(data.weight))) : "",
+    height: data.height ? String(cmToIn(Number(data.height))) : "",
+  };
+}
+
 /* ═══════════════════════════ PROFILE PAGE ════════════════════════════ */
 export default function ProfilePage() {
   const router = useRouter();
@@ -344,7 +368,12 @@ export default function ProfilePage() {
             value={unitSystem}
             exclusive
             onChange={(_, val) => {
-              if (val) setUnitSystem(val);
+              if (val && val !== unitSystem) {
+                const converted = convertProfile(profile, val);
+                setProfile(converted);
+                reset(converted);
+                setUnitSystem(val);
+              }
             }}
             sx={{
               bgcolor: "#fff",
