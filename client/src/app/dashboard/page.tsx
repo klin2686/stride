@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -359,7 +359,12 @@ function TrendLine() {
 export default function DashboardPage() {
   const router = useRouter();
   const [navValue, setNavValue] = useState(0);
-  const username = "username"; // Replace with dynamic value later
+  const [username, setUsername] = useState("");
+
+  useEffect(() => {
+    const stored = localStorage.getItem("username");
+    if (stored) setUsername(stored);
+  }, []);
 
   return (
     <Box
@@ -387,7 +392,7 @@ export default function DashboardPage() {
           variant="h5"
           sx={{ fontWeight: 700, mb: 2.5, color: "#1a1a1a" }}
         >
-          Hello, {`{${username}}`}
+          Hello, {username || "there"}
         </Typography>
 
         {/* 2 · RunIQ Hero Card */}
