@@ -671,6 +671,7 @@ export default function DashboardPage() {
           bottom: 0,
           left: 0,
           right: 0,
+          zIndex: 1200,
           maxWidth: 600,
           mx: "auto",
           bgcolor: "#a8d4e6",
