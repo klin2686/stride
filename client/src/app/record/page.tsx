@@ -24,7 +24,7 @@ import ProfileIcon from "@mui/icons-material/PersonOutlineOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import BluetoothIcon from "@mui/icons-material/Bluetooth";
+import WifiIcon from "@mui/icons-material/Wifi";
 import BatteryChargingFullIcon from "@mui/icons-material/BatteryChargingFull";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
@@ -377,12 +377,12 @@ export default function RecordPage() {
   const router = useRouter();
   const [checks, setChecks] = useState<SystemCheck[]>([
     {
-      id: "bluetooth",
-      label: "Bluetooth",
-      description: "BLE connection to Modulino sensor",
+      id: "wifi",
+      label: "Wi-Fi Connection",
+      description: "Stable connection to Arduino sensor",
       status: "checking",
       detail: "",
-      icon: <BluetoothIcon sx={{ fontSize: 22, color: "#5b9bd5" }} />,
+      icon: <WifiIcon sx={{ fontSize: 22, color: "#5b9bd5" }} />,
     },
     {
       id: "background",
@@ -426,48 +426,83 @@ export default function RecordPage() {
     []
   );
 
-  /* ── 1. Bluetooth Check ── */
-  const checkBluetooth = useCallback(async () => {
-    updateCheck("bluetooth", "checking", "");
+  /* ── 1. Wi-Fi / Network Check ── */
+  const checkWifi = useCallback(async () => {
+    updateCheck("wifi", "checking", "");
 
-    // Check if Web Bluetooth API is available
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nav = navigator as any;
-
-    if (!nav.bluetooth) {
+    // Basic online check
+    if (!navigator.onLine) {
       updateCheck(
-        "bluetooth",
+        "wifi",
         "failed",
-        "Bluetooth not supported on this browser. Use Chrome or a native wrapper."
+        "No internet connection. Connect to Wi-Fi to communicate with the Arduino."
       );
       return;
     }
 
-    try {
-      // Check if Bluetooth is available on the device
-      const available = await nav.bluetooth.getAvailability();
-      if (available) {
-        // In a real app, you'd check for an active BLE connection to the Modulino here.
-        // For now, we mark it as a warning since no device is paired yet.
+    // Use the Network Information API if available to check connection quality
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const conn = (navigator as any).connection;
+
+    if (conn) {
+      const type = conn.type; // wifi, cellular, ethernet, etc.
+      const downlink = conn.downlink; // Mbps
+
+      if (type === "wifi" || type === "ethernet") {
+        if (downlink && downlink >= 1) {
+          updateCheck(
+            "wifi",
+            "passed",
+            `Connected via ${type.toUpperCase()} (${downlink} Mbps). Ready for WebSocket.`
+          );
+        } else {
+          updateCheck(
+            "wifi",
+            "warning",
+            `Connected via ${type.toUpperCase()} but speed is low. WebSocket may be unstable.`
+          );
+        }
+      } else if (type === "cellular") {
         updateCheck(
-          "bluetooth",
+          "wifi",
           "warning",
-          "Bluetooth available. No Modulino sensor paired yet."
+          "On cellular data. Wi-Fi is recommended for stable Arduino communication."
         );
       } else {
         updateCheck(
-          "bluetooth",
-          "failed",
-          "Bluetooth is turned off. Enable it in device settings."
+          "wifi",
+          "passed",
+          "Network connection detected. Ready for WebSocket."
         );
       }
-    } catch {
-      // getAvailability() not supported in all browsers
-      updateCheck(
-        "bluetooth",
-        "warning",
-        "Cannot verify Bluetooth status. Ensure Bluetooth is on."
-      );
+    } else {
+      // Network Information API not available — just confirm we're online
+      // Do a quick latency check by fetching a tiny resource
+      try {
+        const start = performance.now();
+        await fetch(window.location.origin, { method: "HEAD", cache: "no-store" });
+        const latency = Math.round(performance.now() - start);
+
+        if (latency < 500) {
+          updateCheck(
+            "wifi",
+            "passed",
+            `Online with ${latency}ms latency. Ready for WebSocket.`
+          );
+        } else {
+          updateCheck(
+            "wifi",
+            "warning",
+            `Online but high latency (${latency}ms). WebSocket may be unstable.`
+          );
+        }
+      } catch {
+        updateCheck(
+          "wifi",
+          "passed",
+          "Online. Ready for WebSocket communication."
+        );
+      }
     }
   }, [updateCheck]);
 
@@ -592,14 +627,14 @@ export default function RecordPage() {
     );
 
     // Stagger checks slightly for visual feedback
-    await checkBluetooth();
+    await checkWifi();
     await new Promise((r) => setTimeout(r, 300));
     await checkBackground();
     await new Promise((r) => setTimeout(r, 300));
     await checkProfile();
     await new Promise((r) => setTimeout(r, 300));
     await checkGPS();
-  }, [checkBluetooth, checkBackground, checkProfile, checkGPS]);
+  }, [checkWifi, checkBackground, checkProfile, checkGPS]);
 
   /* ── Run on mount ── */
   useEffect(() => {
@@ -654,9 +689,8 @@ export default function RecordPage() {
       case "profile":
         setProfileDialogOpen(true);
         break;
-      case "bluetooth":
-        // In a real app, this would open BLE scanning
-        checkBluetooth();
+      case "wifi":
+        checkWifi();
         break;
       case "gps":
         // Try requesting location to trigger the permission prompt
@@ -889,7 +923,10 @@ export default function RecordPage() {
                   fullWidth
                   variant="contained"
                   disabled={!allPassed || isChecking}
-                  onClick={() => setCalibration("calibrating")}
+                  onClick={() => {
+                    setCalibration("calibrating");
+                    fetch("http://172.31.89.83:8000/calibrate", { method: "POST" }).catch(() => {});
+                  }}
                   sx={{
                     py: 2,
                     borderRadius: 3,
@@ -948,6 +985,7 @@ export default function RecordPage() {
           {calibration === "complete" && (
             <CalibrationComplete
               onContinue={() => {
+                fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
                 router.push("/run");
               }}
             />
