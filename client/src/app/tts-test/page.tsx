@@ -11,7 +11,7 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
-import { initAudio, speak } from "@/lib/tts";
+import { speak } from "@/lib/tts";
 
 const PRESET_CUES = [
   "Great pace! Keep it up.",
@@ -26,12 +26,6 @@ export default function TtsTestPage() {
   const [customText, setCustomText] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [unlocked, setUnlocked] = useState(false);
-
-  async function handleUnlock() {
-    await initAudio();
-    setUnlocked(true);
-  }
 
   async function handleSpeak(text: string) {
     setError(null);
@@ -54,18 +48,6 @@ export default function TtsTestPage() {
         Development only — tests ElevenLabs text-to-speech.
       </Typography>
 
-      {/* Step 1: unlock audio context */}
-      {!unlocked && (
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handleUnlock}
-          sx={{ mb: 3, py: 1.5, borderRadius: 2 }}
-        >
-          Tap to unlock audio
-        </Button>
-      )}
-
       {/* Preset cues */}
       <Typography variant="subtitle2" fontWeight={600} mb={1}>
         Preset cues
@@ -75,7 +57,7 @@ export default function TtsTestPage() {
           <Button
             key={cue}
             variant="outlined"
-            disabled={!unlocked || loading !== null}
+            disabled={loading !== null}
             onClick={() => handleSpeak(cue)}
             sx={{ justifyContent: "flex-start", textTransform: "none", borderRadius: 2 }}
             endIcon={loading === cue ? <CircularProgress size={16} /> : null}
@@ -96,13 +78,12 @@ export default function TtsTestPage() {
         placeholder="Type anything to speak..."
         value={customText}
         onChange={(e) => setCustomText(e.target.value)}
-        disabled={!unlocked}
         sx={{ mb: 1.5 }}
       />
       <Button
         variant="contained"
         fullWidth
-        disabled={!unlocked || !customText.trim() || loading !== null}
+        disabled={!customText.trim() || loading !== null}
         onClick={() => handleSpeak(customText.trim())}
         sx={{ py: 1.5, borderRadius: 2 }}
         endIcon={loading === customText.trim() ? <CircularProgress size={16} color="inherit" /> : null}

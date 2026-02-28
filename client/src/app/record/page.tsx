@@ -923,7 +923,10 @@ export default function RecordPage() {
                   fullWidth
                   variant="contained"
                   disabled={!allPassed || isChecking}
-                  onClick={() => setCalibration("calibrating")}
+                  onClick={() => {
+                    setCalibration("calibrating");
+                    fetch("http://172.31.89.83:8000/calibrate", { method: "POST" }).catch(() => {});
+                  }}
                   sx={{
                     py: 2,
                     borderRadius: 3,
@@ -982,6 +985,7 @@ export default function RecordPage() {
           {calibration === "complete" && (
             <CalibrationComplete
               onContinue={() => {
+                fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
                 router.push("/run");
               }}
             />

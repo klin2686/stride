@@ -28,17 +28,6 @@ function getAudioContext(): AudioContext {
 }
 
 /**
- * Call this once inside a user gesture handler (e.g. the "Start Run" button click)
- * to unlock AudioContext for the session. Safe to call multiple times.
- */
-export async function initAudio(): Promise<void> {
-  const ctx = getAudioContext();
-  if (ctx.state === "suspended") {
-    await ctx.resume();
-  }
-}
-
-/**
  * Speak the given text aloud using ElevenLabs TTS.
  * Resolves when the audio finishes playing.
  * Rejects if the API call fails or the key is missing.

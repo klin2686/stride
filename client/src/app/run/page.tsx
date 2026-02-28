@@ -108,6 +108,20 @@ export default function RunPage() {
     statusRef.current = status;
   }, [status]);
 
+  /* ── Arduino WebSocket ── */
+  useEffect(() => {
+    const ws = new WebSocket("ws://172.31.89.83:8000/ws/app");
+    ws.onmessage = (event) => {
+      console.log("[Arduino]", event.data);
+    };
+    ws.onerror = (err) => {
+      console.error("[Arduino WS error]", err);
+    };
+    return () => {
+      ws.close();
+    };
+  }, []);
+
   /* ── Timer ── */
   useEffect(() => {
     if (status === "running") {
@@ -647,7 +661,10 @@ export default function RunPage() {
             Cancel
           </Button>
           <Button
-            onClick={handleStopConfirm}
+            onClick={() => {
+              handleStopConfirm();
+              fetch("http://172.31.89.83:8000/stop", { method: "POST" }).catch(() => {});
+            }}
             variant="contained"
             sx={{
               textTransform: "none",
