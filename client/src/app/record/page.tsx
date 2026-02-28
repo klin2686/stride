@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -29,6 +29,239 @@ import BatteryChargingFullIcon from "@mui/icons-material/BatteryChargingFull";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
+
+/* ──────────────────── Calibration Types ──────────────────── */
+type CalibrationState = "idle" | "calibrating" | "complete";
+const CALIBRATION_DURATION = 4; // seconds
+
+/* ──────────────── Calibration Timer Component ────────────── */
+function CalibrationTimer({
+  onComplete,
+}: {
+  onComplete: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const rafRef = useRef<number>(0);
+
+  const remaining = Math.max(CALIBRATION_DURATION - elapsed, 0);
+  const progress = elapsed / CALIBRATION_DURATION; // 0 → 1
+
+  // SVG circle math
+  const size = 200;
+  const strokeWidth = 10;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress);
+
+  useEffect(() => {
+    startTimeRef.current = performance.now();
+
+    const tick = (now: number) => {
+      const secs = (now - startTimeRef.current) / 1000;
+      setElapsed(secs);
+
+      if (secs >= CALIBRATION_DURATION) {
+        onComplete();
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [onComplete]);
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 3,
+        py: 6,
+      }}
+    >
+      {/* Instruction */}
+      <Typography
+        sx={{
+          fontWeight: 700,
+          fontSize: "1.1rem",
+          color: "#1a1a1a",
+          textAlign: "center",
+        }}
+      >
+        Stand perfectly still
+      </Typography>
+      <Typography
+        sx={{
+          fontSize: "0.85rem",
+          color: "text.secondary",
+          textAlign: "center",
+          maxWidth: 260,
+          lineHeight: 1.5,
+        }}
+      >
+        Zeroing the sensor drift and establishing baseline orientation…
+      </Typography>
+
+      {/* Circular Timer */}
+      <Box sx={{ position: "relative", width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {/* Background track */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#e8f5e9"
+            strokeWidth={strokeWidth}
+          />
+          {/* Animated green ring */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#2e7d32"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            style={{ transition: "stroke-dashoffset 0.1s linear" }}
+          />
+        </svg>
+
+        {/* Center countdown text */}
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: "3.5rem",
+              fontWeight: 800,
+              color: "#2e7d32",
+              lineHeight: 1,
+            }}
+          >
+            {Math.ceil(remaining)}
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              color: "text.secondary",
+              mt: 0.5,
+            }}
+          >
+            seconds
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Pulsing dot indicator */}
+      <Box
+        sx={{
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          bgcolor: "#2e7d32",
+          animation: "pulse 1.2s ease-in-out infinite",
+          "@keyframes pulse": {
+            "0%, 100%": { opacity: 1, transform: "scale(1)" },
+            "50%": { opacity: 0.4, transform: "scale(1.4)" },
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
+/* ──────────── Calibration Complete Component ─────────────── */
+function CalibrationComplete({ onContinue }: { onContinue: () => void }) {
+  return (
+    <Fade in timeout={500}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 2,
+          py: 6,
+        }}
+      >
+        {/* Success icon with ring animation */}
+        <Box
+          sx={{
+            width: 120,
+            height: 120,
+            borderRadius: "50%",
+            bgcolor: "#e8f5e9",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            animation: "scaleIn 0.4s ease-out",
+            "@keyframes scaleIn": {
+              "0%": { transform: "scale(0.5)", opacity: 0 },
+              "100%": { transform: "scale(1)", opacity: 1 },
+            },
+          }}
+        >
+          <CheckCircleIcon sx={{ fontSize: 72, color: "#2e7d32" }} />
+        </Box>
+
+        <Typography
+          variant="h5"
+          sx={{ fontWeight: 800, color: "#1a1a1a", mt: 1 }}
+        >
+          Calibration Complete
+        </Typography>
+        <Typography
+          sx={{
+            fontSize: "0.9rem",
+            color: "text.secondary",
+            textAlign: "center",
+            maxWidth: 280,
+            lineHeight: 1.5,
+          }}
+        >
+          Sensor baseline established. Orientation verified. You&apos;re ready to
+          run!
+        </Typography>
+
+        <Button
+          fullWidth
+          variant="contained"
+          onClick={onContinue}
+          sx={{
+            mt: 3,
+            py: 2,
+            borderRadius: 3,
+            fontSize: "1.1rem",
+            fontWeight: 800,
+            textTransform: "none",
+            bgcolor: "#2e7d32",
+            boxShadow: "0 4px 20px rgba(46,125,50,0.35)",
+            "&:hover": { bgcolor: "#1b5e20" },
+            maxWidth: 340,
+          }}
+        >
+          Start Run
+        </Button>
+      </Box>
+    </Fade>
+  );
+}
 
 /* ─────────────────────────────── Types ──────────────────────────── */
 type CheckStatus = "checking" | "passed" | "failed" | "warning";
@@ -177,6 +410,7 @@ export default function RecordPage() {
     },
   ]);
 
+  const [calibration, setCalibration] = useState<CalibrationState>("idle");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [missingWeight, setMissingWeight] = useState("");
   const [missingHeight, setMissingHeight] = useState("");
@@ -631,57 +865,79 @@ export default function RecordPage() {
           </Button>
         </Box>
 
-        {/* ── Start Calibration Button ── */}
-        <Fade in={allPassed && !isChecking}>
-          <Box>
-            <Button
-              fullWidth
-              variant="contained"
-              disabled={!allPassed || isChecking}
-              sx={{
-                py: 2,
-                borderRadius: 3,
-                fontSize: "1.1rem",
-                fontWeight: 800,
-                textTransform: "none",
-                bgcolor: "#2e7d32",
-                boxShadow: "0 4px 20px rgba(46,125,50,0.35)",
-                "&:hover": { bgcolor: "#1b5e20" },
-                "&.Mui-disabled": {
-                  bgcolor: "#ccc",
-                  color: "#999",
-                },
-              }}
-            >
-              Start Calibration
-            </Button>
+        {/* ── Calibration Flow ── */}
+        {calibration === "idle" && (
+          <>
+            {/* Start Calibration Button */}
+            <Fade in={allPassed && !isChecking}>
+              <Box>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  disabled={!allPassed || isChecking}
+                  onClick={() => setCalibration("calibrating")}
+                  sx={{
+                    py: 2,
+                    borderRadius: 3,
+                    fontSize: "1.1rem",
+                    fontWeight: 800,
+                    textTransform: "none",
+                    bgcolor: "#2e7d32",
+                    boxShadow: "0 4px 20px rgba(46,125,50,0.35)",
+                    "&:hover": { bgcolor: "#1b5e20" },
+                    "&.Mui-disabled": {
+                      bgcolor: "#ccc",
+                      color: "#999",
+                    },
+                  }}
+                >
+                  Start Calibration
+                </Button>
+                <Typography
+                  sx={{
+                    textAlign: "center",
+                    fontSize: "0.78rem",
+                    color: "text.secondary",
+                    mt: 1,
+                  }}
+                >
+                  Stand still for 4 seconds to zero the sensor
+                </Typography>
+              </Box>
+            </Fade>
+
+            {/* Disclaimer */}
             <Typography
               sx={{
                 textAlign: "center",
-                fontSize: "0.78rem",
-                color: "text.secondary",
-                mt: 1,
+                fontSize: "0.72rem",
+                color: "text.disabled",
+                mt: 4,
+                px: 2,
+                lineHeight: 1.5,
               }}
             >
-              Stand still for 3–5 seconds to zero the sensor
+              Some checks may not reflect the latest state. Tap &quot;Re-run all
+              checks&quot; to refresh.
             </Typography>
-          </Box>
-        </Fade>
+          </>
+        )}
 
-        {/* ── Disclaimer ── */}
-        <Typography
-          sx={{
-            textAlign: "center",
-            fontSize: "0.72rem",
-            color: "text.disabled",
-            mt: 4,
-            px: 2,
-            lineHeight: 1.5,
-          }}
-        >
-          Some checks may not reflect the latest state. Tap &quot;Re-run all
-          checks&quot; to refresh.
-        </Typography>
+        {calibration === "calibrating" && (
+          <CalibrationTimer
+            onComplete={() => setCalibration("complete")}
+          />
+        )}
+
+        {calibration === "complete" && (
+          <CalibrationComplete
+            onContinue={() => {
+              // TODO: Navigate to the active run screen
+              // For now, just log and stay on the page
+              console.log("Starting run…");
+            }}
+          />
+        )}
       </Box>
 
       {/* ── Profile Fix Dialog ── */}
