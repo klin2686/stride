@@ -12,6 +12,37 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import RecordButton from "@mui/icons-material/RadioButtonChecked";
 import ProfileIcon from "@mui/icons-material/PersonOutlineOutlined";
 
+/* ───────────────────── Swiper Imports ───────────────────── */
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Pagination, Autoplay } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
+
+/* ───────────────────── Coaching Tips Data ───────────────────── */
+const coachingTips = [
+  {
+    id: 1,
+    quote:
+      "Don\u2019t overreach your strides. Instead, let your feet land directly under your center of mass.",
+    imageSrc:
+      "https://images.unsplash.com/photo-1528629297340-d1d466945dc5?q=80&w=1000&auto=format&fit=crop",
+  },
+  {
+    id: 2,
+    quote:
+      "Keep a tall posture. Lean slightly from the ankles, not your waist, to let gravity pull you forward.",
+    imageSrc:
+      "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?q=80&w=1000&auto=format&fit=crop",
+  },
+  {
+    id: 3,
+    quote:
+      "Imagine running on hot coals. Quick, light steps keep your ground contact time low and reduce impact stress.",
+    imageSrc:
+      "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?q=80&w=1000&auto=format&fit=crop",
+  },
+];
+
 /* ───────────────────── Segmented Progress Bar ───────────────────── */
 function SegmentedProgressBar({
   total,
@@ -208,12 +239,13 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* 5 · How to Level Up Card */}
+        {/* 5 · How to Level Up — Swipeable Tips */}
         <Card
           sx={{
             borderRadius: 3,
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
             mb: 2,
+            overflow: "visible",
           }}
         >
           <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
@@ -229,43 +261,78 @@ export default function DashboardPage() {
               How to Level Up
             </Typography>
 
-            {/* Image placeholder with overlay text */}
+            {/* Swiper Carousel */}
             <Box
               sx={{
-                position: "relative",
-                borderRadius: 2,
-                overflow: "hidden",
-                height: 180,
-                backgroundImage:
-                  "linear-gradient(135deg, #6da8c7 0%, #a3c4d9 50%, #d4a76a 100%)",
-                backgroundSize: "cover",
-                display: "flex",
-                alignItems: "flex-start",
-                p: 2,
+                /* Pagination dot styling overrides */
+                "& .swiper-pagination": {
+                  bottom: "10px !important",
+                },
+                "& .swiper-pagination-bullet": {
+                  bgcolor: "rgba(255,255,255,0.5)",
+                  width: 8,
+                  height: 8,
+                  opacity: 1,
+                  transition: "all 0.3s ease",
+                },
+                "& .swiper-pagination-bullet-active": {
+                  bgcolor: "#fff",
+                  width: 20,
+                  borderRadius: "4px",
+                },
               }}
             >
-              {/* Semi-transparent overlay for readability */}
-              <Box
-                sx={{
-                  position: "absolute",
-                  inset: 0,
-                  bgcolor: "rgba(0,0,0,0.18)",
-                }}
-              />
-              <Typography
-                sx={{
-                  position: "relative",
-                  color: "#fff",
-                  fontWeight: 600,
-                  fontSize: "0.95rem",
-                  lineHeight: 1.5,
-                  maxWidth: "70%",
-                  textShadow: "0 1px 4px rgba(0,0,0,0.35)",
-                }}
+              <Swiper
+                modules={[Pagination, Autoplay]}
+                pagination={{ clickable: true }}
+                autoplay={{ delay: 6000, disableOnInteraction: true }}
+                loop
+                spaceBetween={0}
+                slidesPerView={1}
+                style={{ borderRadius: 12 }}
               >
-                Don&apos;t overreach your strides. Instead, let your feet land
-                under your center of mass.
-              </Typography>
+                {coachingTips.map((tip) => (
+                  <SwiperSlide key={tip.id}>
+                    <Box
+                      sx={{
+                        position: "relative",
+                        borderRadius: 3,
+                        overflow: "hidden",
+                        height: 200,
+                        backgroundImage: `url(${tip.imageSrc})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        display: "flex",
+                        alignItems: "flex-end",
+                        p: 2.5,
+                      }}
+                    >
+                      {/* Gradient overlay for readability */}
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          inset: 0,
+                          background:
+                            "linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.05) 100%)",
+                        }}
+                      />
+                      <Typography
+                        sx={{
+                          position: "relative",
+                          color: "#fff",
+                          fontWeight: 600,
+                          fontSize: "0.9rem",
+                          lineHeight: 1.55,
+                          textShadow: "0 1px 6px rgba(0,0,0,0.4)",
+                          pr: 1,
+                        }}
+                      >
+                        &ldquo;{tip.quote}&rdquo;
+                      </Typography>
+                    </Box>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </Box>
           </CardContent>
         </Card>
