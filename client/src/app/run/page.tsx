@@ -20,6 +20,8 @@ import "mapbox-gl/dist/mapbox-gl.css";
 
 /* ─────────────────────── Constants ─────────────────────── */
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+const NODE_URL = process.env.NEXT_PUBLIC_NODE_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+const NODE_WS_URL = NODE_URL.replace(/^https?/, NODE_URL.startsWith("https") ? "wss" : "ws");
 
 // Default viewport — Irvine, CA
 const DEFAULT_CENTER = { longitude: -117.826166, latitude: 33.684566 };
@@ -110,7 +112,7 @@ export default function RunPage() {
 
   /* ── Arduino WebSocket ── */
   useEffect(() => {
-    const ws = new WebSocket("ws://172.31.89.83:8000/ws/app");
+    const ws = new WebSocket(`${NODE_WS_URL}/ws/app`);
     ws.onmessage = (event) => {
       console.log("[Arduino]", event.data);
     };
@@ -275,12 +277,12 @@ export default function RunPage() {
   /* ── Handlers ── */
   const handlePause = useCallback(() => {
     setStatus("paused");
-    fetch("http://172.31.89.83:8000/pause", { method: "POST" }).catch(() => {});
+    fetch(`${NODE_URL}/pause`, { method: "POST" }).catch(() => {});
   }, []);
 
   const handleResume = useCallback(() => {
     setStatus("running");
-    fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
+    fetch(`${NODE_URL}/start`, { method: "POST" }).catch(() => {});
   }, []);
 
   const handleStopConfirm = useCallback(() => {
@@ -665,7 +667,7 @@ export default function RunPage() {
           <Button
             onClick={() => {
               handleStopConfirm();
-              fetch("http://172.31.89.83:8000/stop", { method: "POST" }).catch(() => {});
+              fetch(`${NODE_URL}/stop`, { method: "POST" }).catch(() => {});
             }}
             variant="contained"
             sx={{
