@@ -1,65 +1,316 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import BottomNavigation from "@mui/material/BottomNavigation";
+import BottomNavigationAction from "@mui/material/BottomNavigationAction";
+import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import CircleIcon from "@mui/icons-material/Circle";
+
+/* ───────────────────── Segmented Progress Bar ───────────────────── */
+function SegmentedProgressBar({
+  total,
+  filled,
+}: {
+  total: number;
+  filled: number;
+}) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <Box sx={{ display: "flex", gap: "4px", mt: 1.5 }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <Box
+          key={i}
+          sx={{
+            flex: 1,
+            height: 14,
+            borderRadius: "3px",
+            bgcolor: i < filled ? "#5b9bd5" : "#d4e6f6",
+          }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      ))}
+    </Box>
+  );
+}
+
+/* ───────────────── Placeholder Trend Line (SVG) ─────────────────── */
+function TrendLine() {
+  // Points that mimic the rising trend in the design
+  const points = [
+    { x: 20, y: 70 },
+    { x: 50, y: 55 },
+    { x: 80, y: 50 },
+    { x: 120, y: 60 },
+    { x: 160, y: 30 },
+    { x: 200, y: 15 },
+  ];
+
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <svg
+      viewBox="0 0 220 90"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ width: "100%", height: "100%" }}
+    >
+      <polyline
+        points={polyline}
+        stroke="white"
+        strokeWidth="2.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {points.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="4" fill="white" />
+      ))}
+    </svg>
+  );
+}
+
+/* ════════════════════════════ HOME PAGE ═════════════════════════════ */
+export default function Home() {
+  const [navValue, setNavValue] = useState(0);
+  const username = "username"; // Replace with dynamic value later
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100dvh",
+        bgcolor: "#f2f2f2",
+        maxWidth: 600,
+        mx: "auto",
+      }}
+    >
+      {/* ─── Scrollable Content Area ─── */}
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          px: 2,
+          pt: 3,
+          pb: "80px", // space for fixed bottom nav
+        }}
+      >
+        {/* 1 · Greeting Header */}
+        <Typography
+          variant="h5"
+          sx={{ fontWeight: 700, mb: 2.5, color: "#1a1a1a" }}
+        >
+          Hello, {`{${username}}`}
+        </Typography>
+
+        {/* 2 · RunIQ Hero Card */}
+        <Card
+          sx={{
+            bgcolor: "#8ec8e8",
+            borderRadius: 3,
+            border: "2px solid #8b5cf6",
+            boxShadow: "none",
+            mb: 2.5,
+          }}
+        >
+          <CardContent
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              p: 2.5,
+              "&:last-child": { pb: 2.5 },
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {/* Left – score + label */}
+            <Box sx={{ minWidth: 100 }}>
+              <Typography
+                sx={{
+                  fontSize: "3.5rem",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: "#fff",
+                }}
+              >
+                165
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: "1rem",
+                  fontStyle: "italic",
+                  color: "#fff",
+                  mt: 0.5,
+                }}
+              >
+                RunIQ
+              </Typography>
+            </Box>
+
+            {/* Right – trend line */}
+            <Box sx={{ flex: 1, maxWidth: 220, height: 80, ml: 2 }}>
+              <TrendLine />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* 3 · Last Run Card */}
+        <Card
+          sx={{
+            borderRadius: 3,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            mb: 2.5,
+          }}
+        >
+          <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", mb: 0.5 }}>
+              Last Run
+            </Typography>
+            <Typography sx={{ color: "text.secondary", fontSize: "0.9rem" }}>
+              Tuesday May 5
+            </Typography>
+            <Typography
+              sx={{ color: "text.secondary", fontSize: "0.9rem", mt: 0.25 }}
+            >
+              3.2 mi &nbsp;|&nbsp; 32 min
+            </Typography>
+          </CardContent>
+        </Card>
+
+        {/* 4 · Skill Card */}
+        <Card
+          sx={{
+            borderRadius: 3,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            mb: 2.5,
+          }}
+        >
+          <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+            <Typography
+              sx={{
+                fontSize: "0.75rem",
+                textTransform: "uppercase",
+                color: "text.secondary",
+                letterSpacing: 0.5,
+                mb: 0.5,
+              }}
+            >
+              Skill 1
+            </Typography>
+            <Typography sx={{ fontWeight: 700, fontSize: "1rem", mb: 0.5 }}>
+              Running Cadence and Pacing
+            </Typography>
+            <SegmentedProgressBar total={10} filled={4} />
+          </CardContent>
+        </Card>
+
+        {/* 5 · How to Level Up Card */}
+        <Card
+          sx={{
+            borderRadius: 3,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            mb: 2,
+          }}
+        >
+          <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+            <Typography
+              sx={{
+                fontWeight: 700,
+                fontSize: "0.8rem",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                mb: 1.5,
+              }}
+            >
+              How to Level Up
+            </Typography>
+
+            {/* Image placeholder with overlay text */}
+            <Box
+              sx={{
+                position: "relative",
+                borderRadius: 2,
+                overflow: "hidden",
+                height: 180,
+                backgroundImage:
+                  "linear-gradient(135deg, #6da8c7 0%, #a3c4d9 50%, #d4a76a 100%)",
+                backgroundSize: "cover",
+                display: "flex",
+                alignItems: "flex-start",
+                p: 2,
+              }}
+            >
+              {/* Semi-transparent overlay for readability */}
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  bgcolor: "rgba(0,0,0,0.18)",
+                }}
+              />
+              <Typography
+                sx={{
+                  position: "relative",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: "0.95rem",
+                  lineHeight: 1.5,
+                  maxWidth: "70%",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.35)",
+                }}
+              >
+                Don&apos;t overreach your strides. Instead, let your feet land
+                under your center of mass.
+              </Typography>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* 6 · Bottom Navigation (fixed) */}
+      <BottomNavigation
+        value={navValue}
+        onChange={(_, newValue) => setNavValue(newValue)}
+        showLabels
+        sx={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          maxWidth: 600,
+          mx: "auto",
+          bgcolor: "#a8d4e6",
+          height: 64,
+          borderTop: "1px solid rgba(0,0,0,0.06)",
+          "& .MuiBottomNavigationAction-root": {
+            color: "#1a1a1a",
+            minWidth: 0,
+            "&.Mui-selected": {
+              color: "#1a1a1a",
+            },
+          },
+          "& .MuiBottomNavigationAction-label": {
+            fontSize: "0.7rem",
+            "&.Mui-selected": {
+              fontSize: "0.7rem",
+            },
+          },
+        }}
+      >
+        <BottomNavigationAction
+          label="Home"
+          icon={<HomeOutlinedIcon sx={{ fontSize: 28 }} />}
+        />
+        <BottomNavigationAction
+          label="Record"
+          icon={<CircleIcon sx={{ fontSize: 28, color: "#1a1a1a" }} />}
+        />
+        <BottomNavigationAction
+          label="Profile"
+          icon={<CircleIcon sx={{ fontSize: 28, color: "#1a1a1a" }} />}
+        />
+      </BottomNavigation>
+    </Box>
   );
 }
