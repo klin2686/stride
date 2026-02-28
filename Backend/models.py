@@ -13,6 +13,7 @@ class User(Base):
     name = Column(String)
     height = Column(String)
     weight = Column(String)
+    age = Column(Integer)
     gender = Column(String)
     runiq = Column(Integer)
     stats = Column(Text)  # JSON stored as text

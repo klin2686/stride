@@ -27,6 +27,7 @@ class RegisterRequest(BaseModel):
     name: str | None = None
     height: str | None = None
     weight: str | None = None
+    age: int | None = None
     gender: str | None = None
 
 
@@ -69,8 +70,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         "username": <username: str>,
         "password": <password: str>,
         "name": <name: str>,
-        "height": <name: str>,
+        "height": <height: str>,
         "weight": <weight: str>,
+        "age": <age: int>,
         "gender": <gender: str>,
     }
     """
@@ -83,6 +85,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         name=body.name,
         height=body.height,
         weight=body.weight,
+        age=body.age,
         gender=body.gender,
     )
     db.add(user)
