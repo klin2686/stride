@@ -14,7 +14,7 @@ import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import StopIcon from "@mui/icons-material/Stop";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import Map, { Marker, Source, Layer } from "react-map-gl/mapbox";
+import Map, { Marker, Source, Layer, type MapRef } from "react-map-gl/mapbox";
 import type { LayerProps } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -98,6 +98,7 @@ export default function RunPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const mapRef = useRef<MapRef | null>(null);
 
   /* ── Timer ── */
   useEffect(() => {
@@ -118,6 +119,13 @@ export default function RunPage() {
     const onPosition = (pos: GeolocationPosition) => {
       const { latitude: lat, longitude: lng } = pos.coords;
       setUserPosition({ lat, lng });
+
+      // Pan the map to follow the user
+      mapRef.current?.flyTo({
+        center: [lng, lat],
+        duration: 1000,
+        essential: true,
+      });
 
       if (status === "running") {
         // Accumulate distance
@@ -220,6 +228,7 @@ export default function RunPage() {
       {/* ═══════════ Full-Screen Map ═══════════ */}
       <Box sx={{ position: "absolute", inset: 0 }}>
         <Map
+          ref={mapRef}
           initialViewState={{
             longitude: mapCenter.longitude,
             latitude: mapCenter.latitude,
@@ -237,13 +246,42 @@ export default function RunPage() {
             </Source>
           )}
 
-          {/* User position dot */}
-          {userPosition && (
-            <Marker
-              longitude={userPosition.lng}
-              latitude={userPosition.lat}
-              anchor="center"
+          {/* User position dot — always visible */}
+          <Marker
+            longitude={userPosition?.lng ?? DEFAULT_CENTER.longitude}
+            latitude={userPosition?.lat ?? DEFAULT_CENTER.latitude}
+            anchor="center"
+          >
+            <Box
+              sx={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
+              {/* Pulsing outer ring */}
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  bgcolor: "rgba(66,133,244,0.2)",
+                  animation: "gps-pulse 2s ease-out infinite",
+                  "@keyframes gps-pulse": {
+                    "0%": {
+                      transform: "scale(0.8)",
+                      opacity: 1,
+                    },
+                    "100%": {
+                      transform: "scale(2.2)",
+                      opacity: 0,
+                    },
+                  },
+                }}
+              />
+              {/* Inner dot */}
               <Box
                 sx={{
                   width: 18,
@@ -252,10 +290,11 @@ export default function RunPage() {
                   bgcolor: "#4285F4",
                   border: "3px solid #fff",
                   boxShadow: "0 0 12px rgba(66,133,244,0.6)",
+                  zIndex: 1,
                 }}
               />
-            </Marker>
-          )}
+            </Box>
+          </Marker>
         </Map>
       </Box>
 
