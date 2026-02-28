@@ -411,6 +411,7 @@ export default function RecordPage() {
   ]);
 
   const [calibration, setCalibration] = useState<CalibrationState>("idle");
+  const calibrationRef = useRef<HTMLDivElement>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [missingWeight, setMissingWeight] = useState("");
   const [missingHeight, setMissingHeight] = useState("");
@@ -604,6 +605,19 @@ export default function RecordPage() {
   useEffect(() => {
     runAllChecks();
   }, [runAllChecks]);
+
+  /* ── Auto-scroll to calibration section when state changes ── */
+  useEffect(() => {
+    if (calibration === "calibrating" || calibration === "complete") {
+      // Small delay so the DOM has rendered the new content
+      setTimeout(() => {
+        calibrationRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 50);
+    }
+  }, [calibration]);
 
   /* ── Derived state ── */
   const isChecking = checks.some((c) => c.status === "checking");
@@ -923,21 +937,24 @@ export default function RecordPage() {
           </>
         )}
 
-        {calibration === "calibrating" && (
-          <CalibrationTimer
-            onComplete={() => setCalibration("complete")}
-          />
-        )}
+        {/* Anchor for auto-scroll */}
+        <Box ref={calibrationRef}>
+          {calibration === "calibrating" && (
+            <CalibrationTimer
+              onComplete={() => setCalibration("complete")}
+            />
+          )}
 
-        {calibration === "complete" && (
-          <CalibrationComplete
-            onContinue={() => {
-              // TODO: Navigate to the active run screen
-              // For now, just log and stay on the page
-              console.log("Starting run…");
-            }}
-          />
-        )}
+          {calibration === "complete" && (
+            <CalibrationComplete
+              onContinue={() => {
+                // TODO: Navigate to the active run screen
+                // For now, just log and stay on the page
+                console.log("Starting run…");
+              }}
+            />
+          )}
+        </Box>
       </Box>
 
       {/* ── Profile Fix Dialog ── */}
