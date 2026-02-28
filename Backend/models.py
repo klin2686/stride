@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.sql import func
 
 from database import Base
@@ -15,16 +14,6 @@ class User(Base):
     height = Column(String)
     weight = Column(String)
     gender = Column(String)
-
-    stats = relationship("Stats", back_populates="user", uselist=False)
-
-
-class Stats(Base):
-    __tablename__ = "stats"
-
-    id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     runiq = Column(Integer)
     stats = Column(Text)  # JSON stored as text
     created_at = Column(DateTime, server_default=func.now())
-
-    user = relationship("User", back_populates="stats")

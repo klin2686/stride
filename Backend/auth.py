@@ -5,6 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from jwt import PyJWTError as JWTError
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_hex(32))
 ALGORITHM = "HS256"

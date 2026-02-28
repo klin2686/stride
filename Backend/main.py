@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 from database import Base, engine, get_db
 import models
 from models import User
-from auth import create_access_token, decode_access_token, hash_password, verify_password
+from auth import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
+
+import json
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,10 +35,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+class StrideStats(BaseModel):
+    cadence: str
+    impact_asymetry: str
+    breaking_force: str
+    ankle_roll: str
+    ground_contact: str
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)) -> User:
     try:
         payload = decode_access_token(credentials.credentials)
         user_id = int(payload["sub"])
@@ -81,7 +93,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         "id": user.id,
         "username": user.username,
         "access_token": token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
 
@@ -102,7 +114,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         "id": user.id,
         "username": user.username,
         "access_token": token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
 
@@ -111,5 +123,23 @@ def me(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
-        "runiq": current_user.runiq
+        "runiq": current_user.runiq,
     }
+
+
+@app.post("/stats/update")
+def update(body: StrideStats, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Request format:
+    {
+        "cadence": <cadence: str>,
+        "impact_asymetry": <impact_asymetry: str>,
+        "breaking_force": <breaking_force: str>,
+        "ankle_roll": <ankle_roll: str>,
+        "ground_contact": <ground_contact: str>,
+    }
+    """
+    current_user.stats = json.dumps(body.model_dump())
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Stats updated successfully"}
