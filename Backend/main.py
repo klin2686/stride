@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,11 +21,19 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 bearer_scheme = HTTPBearer()
 
+# Allow the Next.js frontend to call the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten this in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class RegisterRequest(BaseModel):
     username: str
     password: str
-    name: str | None = None
     height: str | None = None
     weight: str | None = None
     age: int | None = None
@@ -69,7 +78,6 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     {
         "username": <username: str>,
         "password": <password: str>,
-        "name": <name: str>,
         "height": <height: str>,
         "weight": <weight: str>,
         "age": <age: int>,
@@ -82,7 +90,6 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         username=body.username,
         password_hash=hash_password(body.password),
-        name=body.name,
         height=body.height,
         weight=body.weight,
         age=body.age,

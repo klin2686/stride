@@ -1,2 +1,4 @@
 stride.db
 .env
+__pycache__/
+*.pyc
