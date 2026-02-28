@@ -30,6 +30,9 @@ import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
+/* ─────────────────────── Constants ──────────────────────── */
+const NODE_URL = process.env.NEXT_PUBLIC_NODE_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+
 /* ──────────────────── Calibration Types ──────────────────── */
 type CalibrationState = "idle" | "calibrating" | "complete";
 const CALIBRATION_DURATION = 4; // seconds
@@ -432,7 +435,7 @@ export default function RecordPage() {
 
     try {
       const start = performance.now();
-      const res = await fetch("http://172.31.89.83:8000/health", {
+      const res = await fetch(`${NODE_URL}/health`, {
         cache: "no-store",
         signal: AbortSignal.timeout(4000),
       });
@@ -917,7 +920,7 @@ export default function RecordPage() {
                   disabled={!allPassed || isChecking}
                   onClick={() => {
                     setCalibration("calibrating");
-                    fetch("http://172.31.89.83:8000/calibrate", { method: "POST" }).catch(() => {});
+                    fetch(`${NODE_URL}/calibrate`, { method: "POST" }).catch(() => {});
                   }}
                   sx={{
                     py: 2,
@@ -977,7 +980,7 @@ export default function RecordPage() {
           {calibration === "complete" && (
             <CalibrationComplete
               onContinue={() => {
-                fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
+                fetch(`${NODE_URL}/start`, { method: "POST" }).catch(() => {});
                 router.push("/run");
               }}
             />
