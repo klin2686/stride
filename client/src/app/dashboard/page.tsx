@@ -25,7 +25,7 @@ const coachingTips = [
     quote:
       "Don\u2019t overreach your strides. Instead, let your feet land directly under your center of mass.",
     imageSrc:
-      "https://images.unsplash.com/photo-1528629297340-d1d466945dc5?q=80&w=1000&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?q=80&w=1000&auto=format&fit=crop",
   },
   {
     id: 2,
