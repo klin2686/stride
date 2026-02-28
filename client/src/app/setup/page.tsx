@@ -58,11 +58,14 @@ export default function SetupPage() {
     "imperial"
   );
 
+  const [attempted, setAttempted] = useState(false);
+
   const {
     control,
     handleSubmit,
     trigger,
     getValues,
+    clearErrors,
     formState: { errors },
   } = useForm<SetupFormData>({
     defaultValues: {
@@ -71,7 +74,8 @@ export default function SetupPage() {
       age: "",
       sex: "",
     },
-    mode: "onChange",
+    mode: "onTouched",
+    reValidateMode: "onChange",
   });
 
   const steps = [
@@ -85,10 +89,12 @@ export default function SetupPage() {
 
   /* ── Navigation ── */
   const handleNext = async () => {
+    setAttempted(true);
     const valid = await trigger(currentStep.key);
     if (!valid) return;
 
     if (step < steps.length - 1) {
+      setAttempted(false);
       setStep((s) => s + 1);
     } else {
       handleSubmit(onSubmit)();
@@ -96,7 +102,11 @@ export default function SetupPage() {
   };
 
   const handleBack = () => {
-    if (step > 0) setStep((s) => s - 1);
+    if (step > 0) {
+      setAttempted(false);
+      clearErrors();
+      setStep((s) => s - 1);
+    }
   };
 
   const onSubmit = (data: SetupFormData) => {
@@ -172,7 +182,7 @@ export default function SetupPage() {
                     {option === "other" ? "Prefer not to say" : option}
                   </Button>
                 ))}
-                {errors.sex && (
+                {attempted && errors.sex && (
                   <Typography sx={{ color: "error.main", fontSize: "0.8rem", mt: 0.5 }}>
                     {errors.sex.message}
                   </Typography>
@@ -195,8 +205,8 @@ export default function SetupPage() {
                 placeholder="25"
                 fullWidth
                 autoFocus
-                error={!!errors.age}
-                helperText={errors.age?.message}
+                error={attempted && !!errors.age}
+                helperText={attempted ? errors.age?.message : undefined}
                 slotProps={{
                   input: {
                     endAdornment: (
@@ -241,8 +251,8 @@ export default function SetupPage() {
                 placeholder={unitSystem === "imperial" ? "68" : "173"}
                 fullWidth
                 autoFocus
-                error={!!errors.height}
-                helperText={errors.height?.message}
+                error={attempted && !!errors.height}
+                helperText={attempted ? errors.height?.message : undefined}
                 slotProps={{
                   input: {
                     endAdornment: (
@@ -286,8 +296,8 @@ export default function SetupPage() {
                 placeholder={unitSystem === "imperial" ? "160" : "73"}
                 fullWidth
                 autoFocus
-                error={!!errors.weight}
-                helperText={errors.weight?.message}
+                error={attempted && !!errors.weight}
+                helperText={attempted ? errors.weight?.message : undefined}
                 slotProps={{
                   input: {
                     endAdornment: (
