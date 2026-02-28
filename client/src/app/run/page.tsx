@@ -559,7 +559,10 @@ export default function RunPage() {
             Cancel
           </Button>
           <Button
-            onClick={handleStopConfirm}
+            onClick={() => {
+              handleStopConfirm();
+              fetch("http://172.31.89.83:8000/stop", { method: "POST" }).catch(() => {});
+            }}
             variant="contained"
             sx={{
               textTransform: "none",

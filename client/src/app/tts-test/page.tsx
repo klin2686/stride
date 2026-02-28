@@ -11,7 +11,7 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
-import { initAudio, speak } from "@/lib/tts";
+import { speak } from "@/lib/tts";
 
 const PRESET_CUES = [
   "Great pace! Keep it up.",
@@ -31,7 +31,6 @@ export default function TtsTestPage() {
     setError(null);
     setLoading(text);
     try {
-      await initAudio();
       await speak(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
