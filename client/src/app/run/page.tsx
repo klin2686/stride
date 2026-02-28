@@ -93,12 +93,20 @@ export default function RunPage() {
     lng: number;
   } | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [geoDebug, setGeoDebug] = useState("Initializing...");
 
   /* ── Refs ── */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const mapRef = useRef<MapRef | null>(null);
+  const statusRef = useRef<RunStatus>(status);
+  const positionCountRef = useRef(0);
+
+  // Keep the ref in sync with state
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   /* ── Timer ── */
   useEffect(() => {
@@ -112,64 +120,124 @@ export default function RunPage() {
     };
   }, [status]);
 
-  /* ── Geolocation watcher ── */
-  useEffect(() => {
-    if (!("geolocation" in navigator)) return;
+  /* ── Shared position handler (used by both watchPosition and polling) ── */
+  const handlePosition = useCallback((pos: GeolocationPosition) => {
+    const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
+    positionCountRef.current += 1;
+    const now = new Date();
+    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    const speedInfo = speed !== null ? `${(speed * 3.6).toFixed(1)}km/h` : "n/a";
+    setGeoDebug(
+      `✅ ${lat.toFixed(6)}, ${lng.toFixed(6)} | acc:${accuracy.toFixed(0)}m spd:${speedInfo} | #${positionCountRef.current} @ ${time}`
+    );
 
-    const onPosition = (pos: GeolocationPosition) => {
-      const { latitude: lat, longitude: lng } = pos.coords;
-      setUserPosition({ lat, lng });
+    // Always update the blue dot position
+    setUserPosition({ lat, lng });
 
-      // Pan the map to follow the user
-      mapRef.current?.flyTo({
-        center: [lng, lat],
-        duration: 1000,
-        essential: true,
-      });
+    // Pan the map to follow the user
+    mapRef.current?.flyTo({
+      center: [lng, lat],
+      duration: 800,
+      essential: true,
+    });
 
-      if (status === "running") {
-        // Accumulate distance
-        if (lastPositionRef.current) {
-          const d = haversine(
-            lastPositionRef.current.lat,
-            lastPositionRef.current.lng,
-            lat,
-            lng
-          );
-          // Only count movement > 2m to filter GPS jitter
-          if (d > 2) {
-            setDistanceMeters((prev) => prev + d);
-            setRouteCoords((prev) => [...prev, [lng, lat]]);
-            lastPositionRef.current = { lat, lng };
-          }
-        } else {
-          // First position
-          lastPositionRef.current = { lat, lng };
-          setRouteCoords([[lng, lat]]);
-        }
+    // ── Only record route/distance when running ──
+    if (statusRef.current !== "running") return;
+
+    // Skip positions with very poor accuracy
+    if (accuracy > 50) return;
+
+    // Dynamic minimum distance: at least 5m, scaled with accuracy
+    const minDistance = Math.max(accuracy * 0.4, 5);
+
+    // If device reports speed and it's basically zero, skip (stationary drift)
+    if (speed !== null && speed < 0.3) return;
+
+    if (lastPositionRef.current) {
+      const d = haversine(
+        lastPositionRef.current.lat,
+        lastPositionRef.current.lng,
+        lat,
+        lng
+      );
+      if (d > minDistance) {
+        setDistanceMeters((prev) => prev + d);
+        setRouteCoords((prev) => [...prev, [lng, lat]]);
+        lastPositionRef.current = { lat, lng };
       }
-    };
+    } else {
+      lastPositionRef.current = { lat, lng };
+      setRouteCoords([[lng, lat]]);
+    }
+  }, []);
+
+  /* ── Geolocation: watchPosition + aggressive polling fallback ── */
+  useEffect(() => {
+    if (!("geolocation" in navigator)) {
+      setGeoDebug("❌ Geolocation API not available");
+      return;
+    }
+
+    setGeoDebug("⏳ Requesting location permission...");
 
     const onError = (err: GeolocationPositionError) => {
-      console.warn("Geolocation error:", err.message);
+      const reasons: Record<number, string> = {
+        1: "Permission denied",
+        2: "Position unavailable",
+        3: "Timeout",
+      };
+      setGeoDebug(`❌ ${reasons[err.code] || "Unknown"}: ${err.message}`);
+      console.warn("Geolocation error:", err.code, err.message);
     };
 
+    // Primary: watchPosition with maximumAge=3000 so it can return cached
+    // positions quickly instead of waiting for a brand new GPS fix each time
     watchIdRef.current = navigator.geolocation.watchPosition(
-      onPosition,
+      handlePosition,
       onError,
       {
         enableHighAccuracy: true,
-        maximumAge: 1000,
+        maximumAge: 3000,  // accept positions up to 3s old
         timeout: 10000,
       }
     );
 
+    // Secondary: sequential polling — only requests a new position after
+    // the previous one completes. This avoids jamming the GPS queue on iOS.
+    let pollActive = true;
+
+    const pollLoop = () => {
+      if (!pollActive) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          handlePosition(pos);
+          // Wait 1 second then poll again
+          setTimeout(pollLoop, 1000);
+        },
+        () => {
+          // On error, retry after 2 seconds
+          setTimeout(pollLoop, 2000);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,     // force fresh for the poll
+          timeout: 8000,
+        }
+      );
+    };
+
+    // Start polling after a short delay to let watchPosition get the first fix
+    const pollStartTimer = setTimeout(pollLoop, 2000);
+
     return () => {
+      pollActive = false;
+      clearTimeout(pollStartTimer);
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount once
 
   /* ── Derived values ── */
   const distanceMiles = distanceMeters / 1609.344;
@@ -225,6 +293,26 @@ export default function RunPage() {
         bgcolor: "#000",
       }}
     >
+      {/* ═══════════ Geo Debug Banner ═══════════ */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          right: 8,
+          zIndex: 20,
+          bgcolor: "rgba(0,0,0,0.75)",
+          color: "#fff",
+          px: 1.5,
+          py: 0.75,
+          borderRadius: 1,
+          fontSize: 12,
+          fontFamily: "monospace",
+        }}
+      >
+        GPS: {geoDebug}
+      </Box>
+
       {/* ═══════════ Full-Screen Map ═══════════ */}
       <Box sx={{ position: "absolute", inset: 0 }}>
         <Map
