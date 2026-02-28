@@ -10,7 +10,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     username = Column(String, nullable=False, unique=True)
-    password_hash = Column(String, nullable=False)  # "salt:sha256_hex"
+    password_hash = Column(String, nullable=False)
     name = Column(String)
     height = Column(String)
     weight = Column(String)
