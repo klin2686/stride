@@ -1,5 +1,6 @@
 name: Stride
 description: ""
-ports: []
+ports:
+- 8000
 bricks: []
 icon: 🏅

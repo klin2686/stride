@@ -7,7 +7,9 @@ import asyncio
 import collections
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+import json
 
 # ---------------------------------------------------------------------------
 # Wire format: must match the packed struct on the MCU
@@ -82,9 +84,28 @@ telemetry_max_gyro = 0.0
 telemetry_last_broadcast = 0.0  # Python monotonic time
 
 # ---------------------------------------------------------------------------
+# Metric buffers for app telemetry (rolling window of recent events)
+# ---------------------------------------------------------------------------
+METRIC_BUFFER_SIZE = 10
+APP_TELEMETRY_INTERVAL_S = 1.0
+AUDIO_CUE_COOLDOWN_S = 30
+
+recent_cadence: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
+recent_gct: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
+recent_shock: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
+recent_strikes: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
+
+last_cue_time: dict[str, float] = {
+    "cadence": 0.0,
+    "strike": 0.0,
+    "gct": 0.0,
+}
+
+# ---------------------------------------------------------------------------
 # WebSocket bookkeeping
 # ---------------------------------------------------------------------------
 ws_clients: set[WebSocket] = set()
+app_ws_clients: set[WebSocket] = set()
 _loop: asyncio.AbstractEventLoop | None = None
 
 async def _broadcast(message: str):
@@ -102,17 +123,61 @@ def broadcast(message: str):
     if _loop is not None and _loop.is_running():
         asyncio.run_coroutine_threadsafe(_broadcast(message), _loop)
 
+async def _broadcast_app(data: dict):
+    stale = set()
+    for ws in app_ws_clients:
+        try:
+            await ws.send_text(json.dumps(data))
+        except Exception:
+            stale.add(ws)
+    app_ws_clients.difference_update(stale)
+
+def broadcast_app(data: dict):
+    """Thread-safe: sends JSON to all /ws/app clients."""
+    if _loop is not None and _loop.is_running():
+        asyncio.run_coroutine_threadsafe(_broadcast_app(data), _loop)
+
 # ---------------------------------------------------------------------------
 # FastAPI application
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Stride")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def _capture_loop():
     global _loop
     _loop = asyncio.get_running_loop()
+    asyncio.create_task(_app_telemetry_loop())
+
+async def _app_telemetry_loop():
+    while True:
+        await asyncio.sleep(APP_TELEMETRY_INTERVAL_S)
+        if state != State.RUNNING:
+            continue
+        avg_cadence = round(sum(recent_cadence) / len(recent_cadence)) if recent_cadence else 0
+        avg_gct = round(sum(recent_gct) / len(recent_gct)) if recent_gct else 0
+        avg_shock = round(sum(recent_shock) / len(recent_shock), 2) if recent_shock else 0.0
+        strike_mode = max(set(recent_strikes), key=lambda s: list(recent_strikes).count(s)) if recent_strikes else "Unknown"
+        await _broadcast_app({
+            "type": "telemetry",
+            "data": {
+                "cadence": avg_cadence,
+                "gct": avg_gct,
+                "shock": avg_shock,
+                "strike": strike_mode,
+            },
+        })
 
 # ---- control endpoints ---------------------------------------------------
+
+@app.get("/health")
+async def health_check():
+    return {"status": "online"}
 
 @app.post("/calibrate")
 async def calibrate_endpoint():
@@ -140,10 +205,21 @@ async def start_endpoint():
     broadcast("STATE: Running analysis started")
     return {"status": "running"}
 
+@app.post("/pause")
+async def pause_endpoint():
+    global state
+    state = State.IDLE
+    broadcast("STATE: Paused")
+    return {"status": "idle"}
+
 @app.post("/stop")
 async def stop_endpoint():
     global state
     state = State.IDLE
+    recent_cadence.clear()
+    recent_gct.clear()
+    recent_shock.clear()
+    recent_strikes.clear()
     broadcast("STATE: Stopped")
     return {"status": "idle"}
 
@@ -180,6 +256,16 @@ async def ws_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_clients.discard(websocket)
+
+@app.websocket("/ws/app")
+async def ws_app_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    app_ws_clients.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        app_ws_clients.discard(websocket)
 
 @app.get("/feed")
 async def feed():
@@ -276,6 +362,7 @@ def process_running(samples: list[dict]):
                 shock_peak_g = a_mag
             if ts >= shock_end_ts:
                 tracking_shock = False
+                recent_shock.append(shock_peak_g)
                 broadcast(f"  Impact Shock: {shock_peak_g:.2f}g peak")
 
         # ---- Gait state machine ----
@@ -336,7 +423,9 @@ def _on_impact(s: dict, ts: int, a_mag: float):
 
     last_impact_ts = ts
 
+    recent_strikes.append(strike)
     if cadence_spm > 0:
+        recent_cadence.append(cadence_spm)
         broadcast(
             f"IMPACT: {cadence_spm:.0f} SPM | {strike} (pitch {relative_pitch_deg:+.1f}°)"
         )
@@ -355,20 +444,40 @@ def _on_toe_off(ts: int):
     if cfg["tuning_mode"] and prev_phase != GaitPhase.SWING:
         broadcast(f"PHASE: {prev_phase} -> {GaitPhase.SWING} @ ts={ts}")
 
+    recent_gct.append(gct_ms)
     broadcast(f"TOE-OFF: GCT = {gct_ms} ms ({gct_ms / 1000:.3f} s)")
     if gct_ms > 300:
         broadcast("AUDIO CUE: Ground contact time high, work on quick turnover")
+        now = time.monotonic()
+        if now - last_cue_time["gct"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["gct"] = now
+            broadcast_app({"type": "audio_cue", "message": "Ground contact time high, work on quick turnover."})
 
 
 def _audio_cues(cadence_spm: float, strike: str):
+    now = time.monotonic()
+
     if cadence_spm < cfg["cadence_low_spm"]:
         broadcast("AUDIO CUE: Cadence low, triggering warning")
+        if now - last_cue_time["cadence"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["cadence"] = now
+            broadcast_app({"type": "audio_cue", "message": "Cadence low, increase turnover."})
     elif cadence_spm > cfg["cadence_high_spm"]:
         broadcast("AUDIO CUE: Cadence high, consider slowing turnover")
+        if now - last_cue_time["cadence"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["cadence"] = now
+            broadcast_app({"type": "audio_cue", "message": "Cadence high, consider slowing turnover."})
+
     if strike == "Heel Strike":
         broadcast("AUDIO CUE: Heel striking detected, aim for midfoot")
+        if now - last_cue_time["strike"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["strike"] = now
+            broadcast_app({"type": "audio_cue", "message": "Heel striking detected, aim for midfoot."})
     elif strike == "Forefoot Strike":
         broadcast("AUDIO CUE: Forefoot striking detected, aim for midfoot")
+        if now - last_cue_time["strike"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["strike"] = now
+            broadcast_app({"type": "audio_cue", "message": "Forefoot striking detected, aim for midfoot."})
 
 # ---------------------------------------------------------------------------
 # Main polling loop (called repeatedly by App.run)
