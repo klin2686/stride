@@ -128,12 +128,63 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     }
 
 
+class ProfileUpdateRequest(BaseModel):
+    height: str | None = None      # stored in cm
+    weight: str | None = None      # stored in kg
+    age: int | None = None
+    gender: str | None = None      # "male" | "female" | "other"
+
+
 @app.get("/auth/me")
 def me(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
         "runiq": current_user.runiq,
+        "height": current_user.height,
+        "weight": current_user.weight,
+        "age": current_user.age,
+        "gender": current_user.gender,
+    }
+
+
+@app.put("/auth/profile")
+def update_profile(
+    body: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update the authenticated user's profile metrics.
+    All values are expected in **metric** units (cm, kg).
+
+    Request format:
+    {
+        "height": <height_cm: str | null>,
+        "weight": <weight_kg: str | null>,
+        "age": <age: int | null>,
+        "gender": <"male" | "female" | "other" | null>
+    }
+    """
+    if body.height is not None:
+        current_user.height = body.height
+    if body.weight is not None:
+        current_user.weight = body.weight
+    if body.age is not None:
+        current_user.age = body.age
+    if body.gender is not None:
+        current_user.gender = body.gender
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "height": current_user.height,
+        "weight": current_user.weight,
+        "age": current_user.age,
+        "gender": current_user.gender,
     }
 
 

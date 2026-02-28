@@ -15,6 +15,11 @@ import InputAdornment from "@mui/material/InputAdornment";
 import Fade from "@mui/material/Fade";
 import IconButton from "@mui/material/IconButton";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import Alert from "@mui/material/Alert";
+import CircularProgress from "@mui/material/CircularProgress";
+
+/* ─────────────────────────── Constants ───────────────────────────── */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /* ─────────────────────────────── Types ──────────────────────────── */
 interface SetupFormData {
@@ -65,6 +70,8 @@ export default function SetupPage() {
   );
 
   const [attempted, setAttempted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const {
     control,
@@ -116,10 +123,49 @@ export default function SetupPage() {
     }
   };
 
-  const onSubmit = (data: SetupFormData) => {
-    // TODO: send data to backend / context
-    console.log("Setup complete:", data);
-    router.push("/dashboard");
+  const onSubmit = async (data: SetupFormData) => {
+    setSaving(true);
+    setApiError("");
+
+    try {
+      // Convert to metric for storage if the user is in imperial mode
+      const heightCm =
+        unitSystem === "imperial" && data.height
+          ? String(inToCm(Number(data.height)))
+          : data.height;
+      const weightKg =
+        unitSystem === "imperial" && data.weight
+          ? String(lbsToKg(Number(data.weight)))
+          : data.weight;
+
+      const token = localStorage.getItem("access_token");
+
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          height: heightCm || null,
+          weight: weightKg || null,
+          age: data.age ? Number(data.age) : null,
+          gender: data.sex || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setApiError(err.detail ?? "Failed to save profile. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setApiError("Unable to connect to the server. Please try again later.");
+      setSaving(false);
+    }
   };
 
   /* ── Validation rules ── */
@@ -471,10 +517,23 @@ export default function SetupPage() {
 
       {/* ─── Bottom CTA ─── */}
       <Box sx={{ px: 3, pb: 4, pt: 2 }}>
+        {apiError && (
+          <Fade in>
+            <Alert
+              severity="error"
+              onClose={() => setApiError("")}
+              sx={{ mb: 2, borderRadius: 2, fontSize: "0.85rem" }}
+            >
+              {apiError}
+            </Alert>
+          </Fade>
+        )}
+
         <Button
           fullWidth
           variant="contained"
           onClick={handleNext}
+          disabled={saving}
           sx={{
             py: 1.75,
             borderRadius: 3,
@@ -484,9 +543,16 @@ export default function SetupPage() {
             bgcolor: "#5b9bd5",
             boxShadow: "0 4px 14px rgba(91,155,213,0.35)",
             "&:hover": { bgcolor: "#4a8bc4" },
+            "&.Mui-disabled": { bgcolor: "#a8d4e6", color: "#fff" },
           }}
         >
-          {step < steps.length - 1 ? "Continue" : "Finish Setup"}
+          {saving ? (
+            <CircularProgress size={24} sx={{ color: "#fff" }} />
+          ) : step < steps.length - 1 ? (
+            "Continue"
+          ) : (
+            "Finish Setup"
+          )}
         </Button>
 
         {step < steps.length - 1 && (

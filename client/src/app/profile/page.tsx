@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
@@ -29,6 +29,7 @@ import ProfileIcon from "@mui/icons-material/PersonOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import CircularProgress from "@mui/material/CircularProgress";
 
 /* ─────────────────────────────── Types ──────────────────────────── */
 interface ProfileFormData {
@@ -40,12 +41,29 @@ interface ProfileFormData {
 
 type EditableField = keyof ProfileFormData | null;
 
+/* ─────────────────────────── Constants ───────────────────────────── */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 /* ───────────────────── Unit Conversion Helpers ──────────────────── */
 const lbsToKg = (lbs: number) => Math.round(lbs * 0.453592);
 const kgToLbs = (kg: number) => Math.round(kg / 0.453592);
 const inToCm = (inches: number) => Math.round(inches * 2.54);
 const cmToIn = (cm: number) => Math.round(cm / 2.54);
 
+/** Convert a metric-stored profile to the given display unit system. */
+function metricToDisplay(
+  data: ProfileFormData,
+  displayUnit: "imperial" | "metric"
+): ProfileFormData {
+  if (displayUnit === "metric") return data; // already metric
+  return {
+    ...data,
+    weight: data.weight ? String(kgToLbs(Number(data.weight))) : "",
+    height: data.height ? String(cmToIn(Number(data.height))) : "",
+  };
+}
+
+/** Convert profile from one display unit to another. */
 function convertProfile(
   data: ProfileFormData,
   to: "imperial" | "metric"
@@ -64,16 +82,36 @@ function convertProfile(
   };
 }
 
+/** Convert a display-unit profile to metric for the API. */
+function displayToMetric(
+  data: ProfileFormData,
+  displayUnit: "imperial" | "metric"
+): ProfileFormData {
+  if (displayUnit === "metric") return data;
+  return {
+    ...data,
+    weight: data.weight ? String(lbsToKg(Number(data.weight))) : "",
+    height: data.height ? String(inToCm(Number(data.height))) : "",
+  };
+}
+
 /* ═══════════════════════════ PROFILE PAGE ════════════════════════════ */
 export default function ProfilePage() {
   const router = useRouter();
 
-  // TODO: Replace with real user data from backend/context
   const [profile, setProfile] = useState<ProfileFormData>({
-    weight: "160",
-    height: "68",
-    age: "25",
-    sex: "male",
+    weight: "",
+    height: "",
+    age: "",
+    sex: "",
+  });
+
+  /* profileMetric keeps the metric (DB) copy so we can always convert correctly */
+  const [profileMetric, setProfileMetric] = useState<ProfileFormData>({
+    weight: "",
+    height: "",
+    age: "",
+    sex: "",
   });
 
   const [unitSystem, setUnitSystem] = useState<"imperial" | "metric">(
@@ -81,7 +119,11 @@ export default function ProfilePage() {
   );
   const [editingField, setEditingField] = useState<EditableField>(null);
   const [snackOpen, setSnackOpen] = useState(false);
+  const [snackMessage, setSnackMessage] = useState("Profile updated");
+  const [snackSeverity, setSnackSeverity] = useState<"success" | "error">("success");
   const [sexDialogOpen, setSexDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState("");
 
   const {
     control,
@@ -94,6 +136,59 @@ export default function ProfilePage() {
     mode: "onSubmit",
     reValidateMode: "onChange",
   });
+
+  /* ── Fetch profile from backend on mount ── */
+  const fetchProfile = useCallback(async () => {
+    const token = localStorage.getItem("access_token");
+    const storedUsername = localStorage.getItem("username");
+    if (storedUsername) setUsername(storedUsername);
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("username");
+          router.push("/login");
+        }
+        return;
+      }
+
+      const data = await res.json();
+      const metricData: ProfileFormData = {
+        weight: data.weight ?? "",
+        height: data.height ?? "",
+        age: data.age != null ? String(data.age) : "",
+        sex: data.gender ?? "",
+      };
+
+      setProfileMetric(metricData);
+
+      // Convert to display units
+      const displayData = metricToDisplay(metricData, unitSystem);
+      setProfile(displayData);
+      reset(displayData);
+
+      if (data.username) setUsername(data.username);
+    } catch {
+      // silently fail — profile will show empty
+    } finally {
+      setLoading(false);
+    }
+  }, [router, reset, unitSystem]);
+
+  useEffect(() => {
+    fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ── Validation ── */
   const validationRules = {
@@ -142,17 +237,74 @@ export default function ProfilePage() {
     setEditingField(null);
   };
 
-  const saveField = (data: ProfileFormData) => {
+  /** Persist a single field update to the backend (always sends metric). */
+  const saveToBackend = async (metricPayload: {
+    height?: string | null;
+    weight?: string | null;
+    age?: number | null;
+    gender?: string | null;
+  }) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return false;
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(metricPayload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setSnackMessage(err.detail ?? "Failed to save.");
+        setSnackSeverity("error");
+        setSnackOpen(true);
+        return false;
+      }
+      return true;
+    } catch {
+      setSnackMessage("Unable to connect to the server.");
+      setSnackSeverity("error");
+      setSnackOpen(true);
+      return false;
+    }
+  };
+
+  const saveField = async (data: ProfileFormData) => {
     if (!editingField) return;
-    const updated = { ...profile, [editingField]: data[editingField] };
-    setProfile(updated);
+
+    const updatedDisplay = { ...profile, [editingField]: data[editingField] };
+    const updatedMetric = displayToMetric(updatedDisplay, unitSystem);
+
+    // Build payload with only the changed field
+    const payload: Record<string, string | number | null> = {};
+    if (editingField === "weight") payload.weight = updatedMetric.weight || null;
+    if (editingField === "height") payload.height = updatedMetric.height || null;
+    if (editingField === "age") payload.age = updatedMetric.age ? Number(updatedMetric.age) : null;
+
+    const ok = await saveToBackend(payload);
+    if (!ok) return;
+
+    setProfile(updatedDisplay);
+    setProfileMetric(updatedMetric);
     setEditingField(null);
+    setSnackMessage("Profile updated");
+    setSnackSeverity("success");
     setSnackOpen(true);
   };
 
-  const saveSex = (value: "male" | "female" | "other") => {
+  const saveSex = async (value: "male" | "female" | "other") => {
+    const ok = await saveToBackend({ gender: value });
+    if (!ok) return;
+
     setProfile((prev) => ({ ...prev, sex: value }));
+    setProfileMetric((prev) => ({ ...prev, sex: value }));
     setSexDialogOpen(false);
+    setSnackMessage("Profile updated");
+    setSnackSeverity("success");
     setSnackOpen(true);
   };
 
@@ -312,6 +464,22 @@ export default function ProfilePage() {
     );
   };
 
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100dvh",
+          bgcolor: "#f2f2f2",
+        }}
+      >
+        <CircularProgress sx={{ color: "#5b9bd5" }} />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -352,13 +520,10 @@ export default function ProfilePage() {
               mb: 1.5,
             }}
           >
-            U
+            {username ? username[0].toUpperCase() : "U"}
           </Avatar>
           <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
-            username
-          </Typography>
-          <Typography sx={{ fontSize: "0.85rem", color: "text.secondary" }}>
-            Member since 2025
+            {username || "User"}
           </Typography>
         </Box>
 
@@ -369,7 +534,8 @@ export default function ProfilePage() {
             exclusive
             onChange={(_, val) => {
               if (val && val !== unitSystem) {
-                const converted = convertProfile(profile, val);
+                // Always convert from the metric source-of-truth
+                const converted = metricToDisplay(profileMetric, val);
                 setProfile(converted);
                 reset(converted);
                 setUnitSystem(val);
@@ -522,6 +688,11 @@ export default function ProfilePage() {
             <Divider />
             <Button
               fullWidth
+              onClick={() => {
+                localStorage.removeItem("access_token");
+                localStorage.removeItem("username");
+                router.push("/login");
+              }}
               sx={{
                 justifyContent: "flex-start",
                 textTransform: "none",
@@ -604,17 +775,17 @@ export default function ProfilePage() {
         </DialogActions>
       </Dialog>
 
-      {/* ── Success Snackbar ── */}
+      {/* ── Snackbar ── */}
       <Snackbar
         open={snackOpen}
-        autoHideDuration={2000}
+        autoHideDuration={2500}
         onClose={() => setSnackOpen(false)}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
         sx={{ maxWidth: 600, mx: "auto" }}
       >
         <Alert
           onClose={() => setSnackOpen(false)}
-          severity="success"
+          severity={snackSeverity}
           variant="filled"
           sx={{
             borderRadius: 3,
@@ -622,7 +793,7 @@ export default function ProfilePage() {
             width: "100%",
           }}
         >
-          Profile updated
+          {snackMessage}
         </Alert>
       </Snackbar>
 
