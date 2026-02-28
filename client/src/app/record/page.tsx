@@ -493,7 +493,7 @@ export default function RecordPage() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
       const res = await fetch(`${apiUrl}/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -644,7 +644,7 @@ export default function RecordPage() {
     const heightCm = (Number(missingHeight) * 2.54).toFixed(2);
 
     try {
-      const res = await fetch("https://bronson-nonignitable-waylon.ngrok-free.dev/auth/profile", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

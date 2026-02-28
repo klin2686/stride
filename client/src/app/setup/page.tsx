@@ -19,7 +19,7 @@ import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 
 /* ─────────────────────────── Constants ───────────────────────────── */
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /* ─────────────────────────────── Types ──────────────────────────── */
 interface SetupFormData {

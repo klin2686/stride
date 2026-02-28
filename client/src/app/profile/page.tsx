@@ -42,7 +42,7 @@ interface ProfileFormData {
 type EditableField = keyof ProfileFormData | null;
 
 /* ─────────────────────────── Constants ───────────────────────────── */
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /* ───────────────────── Unit Conversion Helpers ──────────────────── */
 const lbsToKg = (lbs: number) => +(lbs * 0.453592).toFixed(2);
