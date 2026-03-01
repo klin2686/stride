@@ -88,7 +88,7 @@ telemetry_last_broadcast = 0.0  # Python monotonic time
 # ---------------------------------------------------------------------------
 METRIC_BUFFER_SIZE = 10
 APP_TELEMETRY_INTERVAL_S = 1.0
-AUDIO_CUE_COOLDOWN_S = 30
+AUDIO_CUE_COOLDOWN_S = 10
 
 recent_cadence: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
 recent_gct: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
