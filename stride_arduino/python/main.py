@@ -88,7 +88,7 @@ telemetry_last_broadcast = 0.0  # Python monotonic time
 # ---------------------------------------------------------------------------
 METRIC_BUFFER_SIZE = 10
 APP_TELEMETRY_INTERVAL_S = 1.0
-AUDIO_CUE_COOLDOWN_S = 30
+AUDIO_CUE_COOLDOWN_S = 10
 
 recent_cadence: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
 recent_gct: collections.deque = collections.deque(maxlen=METRIC_BUFFER_SIZE)
@@ -429,7 +429,7 @@ def _on_impact(s: dict, ts: int, a_mag: float):
         broadcast(
             f"IMPACT: {cadence_spm:.0f} SPM | {strike} (pitch {relative_pitch_deg:+.1f}°)"
         )
-        _audio_cues(cadence_spm, strike)
+        _audio_cues()
     else:
         broadcast(f"IMPACT: First strike | {strike}")
 
@@ -446,38 +446,51 @@ def _on_toe_off(ts: int):
 
     recent_gct.append(gct_ms)
     broadcast(f"TOE-OFF: GCT = {gct_ms} ms ({gct_ms / 1000:.3f} s)")
-    if gct_ms > 300:
-        broadcast("AUDIO CUE: Ground contact time high, work on quick turnover")
-        now = time.monotonic()
-        if now - last_cue_time["gct"] >= AUDIO_CUE_COOLDOWN_S:
-            last_cue_time["gct"] = now
-            broadcast_app({"type": "audio_cue", "message": "Ground contact time high, work on quick turnover."})
+    _audio_cue_gct()
 
 
-def _audio_cues(cadence_spm: float, strike: str):
+def _audio_cues():
+    """Trigger cues based on moving averages so a single outlier is ignored."""
+    if len(recent_cadence) < 5:
+        return
     now = time.monotonic()
+    avg_cadence = sum(recent_cadence) / len(recent_cadence)
+    strike_mode = max(set(recent_strikes), key=lambda s: list(recent_strikes).count(s)) if recent_strikes else "Unknown"
 
-    if cadence_spm < cfg["cadence_low_spm"]:
-        broadcast("AUDIO CUE: Cadence low, triggering warning")
+    if avg_cadence < cfg["cadence_low_spm"]:
+        broadcast(f"AUDIO CUE: Cadence low (avg {avg_cadence:.0f} SPM)")
         if now - last_cue_time["cadence"] >= AUDIO_CUE_COOLDOWN_S:
             last_cue_time["cadence"] = now
             broadcast_app({"type": "audio_cue", "message": "Cadence low, increase turnover."})
-    elif cadence_spm > cfg["cadence_high_spm"]:
-        broadcast("AUDIO CUE: Cadence high, consider slowing turnover")
+    elif avg_cadence > cfg["cadence_high_spm"]:
+        broadcast(f"AUDIO CUE: Cadence high (avg {avg_cadence:.0f} SPM)")
         if now - last_cue_time["cadence"] >= AUDIO_CUE_COOLDOWN_S:
             last_cue_time["cadence"] = now
             broadcast_app({"type": "audio_cue", "message": "Cadence high, consider slowing turnover."})
 
-    if strike == "Heel Strike":
-        broadcast("AUDIO CUE: Heel striking detected, aim for midfoot")
+    if strike_mode == "Heel Strike":
+        broadcast("AUDIO CUE: Heel striking trend detected, aim for midfoot")
         if now - last_cue_time["strike"] >= AUDIO_CUE_COOLDOWN_S:
             last_cue_time["strike"] = now
             broadcast_app({"type": "audio_cue", "message": "Heel striking detected, aim for midfoot."})
-    elif strike == "Forefoot Strike":
-        broadcast("AUDIO CUE: Forefoot striking detected, aim for midfoot")
+    elif strike_mode == "Forefoot Strike":
+        broadcast("AUDIO CUE: Forefoot striking trend detected, aim for midfoot")
         if now - last_cue_time["strike"] >= AUDIO_CUE_COOLDOWN_S:
             last_cue_time["strike"] = now
             broadcast_app({"type": "audio_cue", "message": "Forefoot striking detected, aim for midfoot."})
+
+
+def _audio_cue_gct():
+    """Trigger GCT cue based on moving average."""
+    if len(recent_gct) < 5:
+        return
+    avg_gct = sum(recent_gct) / len(recent_gct)
+    if avg_gct > 300:
+        now = time.monotonic()
+        broadcast(f"AUDIO CUE: GCT high (avg {avg_gct:.0f} ms)")
+        if now - last_cue_time["gct"] >= AUDIO_CUE_COOLDOWN_S:
+            last_cue_time["gct"] = now
+            broadcast_app({"type": "audio_cue", "message": "Ground contact time high, work on quick turnover."})
 
 # ---------------------------------------------------------------------------
 # Main polling loop (called repeatedly by App.run)
