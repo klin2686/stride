@@ -285,10 +285,20 @@ function TargetRing({
 }
 
 /* ═══════════════ Viz 2: Heat-Map Shoe (Foot Strike) — Compact ═══════════════ */
-function HeatMapShoe({ zone, hasData }: { zone: "heel" | "midfoot" | "toe"; hasData: boolean }) {
+function HeatMapShoe({ zone, hasData }: { zone: "heel" | "midfoot" | "forefoot"; hasData: boolean }) {
   const heelColor = !hasData ? "#e8edf2" : zone === "heel" ? "#ef4444" : "#e8edf2";
   const midColor = !hasData ? "#e8edf2" : zone === "midfoot" ? "#22c55e" : "#e8edf2";
-  const toeColor = !hasData ? "#e8edf2" : zone === "toe" ? "#f59e0b" : "#e8edf2";
+  const foreColor = !hasData ? "#e8edf2" : zone === "forefoot" ? "#f59e0b" : "#e8edf2";
+
+  const label = !hasData
+    ? "Waiting…"
+    : zone === "midfoot"
+    ? "✓ Midfoot"
+    : zone === "heel"
+    ? "⚠ Heel Strike"
+    : "⚠ Forefoot Strike";
+
+  const labelColor = !hasData ? "#bbb" : zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b";
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -299,20 +309,13 @@ function HeatMapShoe({ zone, hasData }: { zone: "heel" | "midfoot" | "toe"; hasD
         />
         <ellipse cx="45" cy="58" rx="20" ry="16" fill={heelColor} opacity="0.7" />
         <ellipse cx="105" cy="50" rx="30" ry="18" fill={midColor} opacity="0.7" />
-        <ellipse cx="165" cy="48" rx="18" ry="14" fill={toeColor} opacity="0.7" />
+        <ellipse cx="165" cy="48" rx="18" ry="14" fill={foreColor} opacity="0.7" />
         <text x="45" y="62" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Heel</text>
         <text x="105" y="54" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Mid</text>
-        <text x="165" y="52" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Toe</text>
+        <text x="165" y="52" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Fore</text>
       </svg>
-      <Typography
-        sx={{
-          fontSize: "0.65rem",
-          fontWeight: 700,
-          mt: 0.25,
-          color: !hasData ? "#bbb" : zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b",
-        }}
-      >
-        {!hasData ? "Waiting…" : zone === "midfoot" ? "✓ Midfoot" : zone === "heel" ? "⚠ Heel" : "⚠ Toe"}
+      <Typography sx={{ fontSize: "0.65rem", fontWeight: 700, mt: 0.25, color: labelColor }}>
+        {label}
       </Typography>
       <Typography sx={{ fontSize: "0.55rem", color: "#999" }}>
         Goal: Midfoot
@@ -492,11 +495,11 @@ function SkillVisualization({
   goals: StrideGoals;
 }) {
   const strike = strideData.strike.toLowerCase();
-  const strikeZone: "heel" | "midfoot" | "toe" =
+  const strikeZone: "heel" | "midfoot" | "forefoot" =
     strike.includes("heel") ? "heel"
     : strike.includes("midfoot") || strike.includes("mid") ? "midfoot"
     : strike === "---" ? "midfoot" // default before data arrives
-    : "toe";
+    : "forefoot"; // "Forefoot Strike" or anything else
 
   switch (skillId) {
     case 1:
