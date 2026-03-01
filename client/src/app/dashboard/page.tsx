@@ -125,14 +125,28 @@ function TargetRing({ value = 168, goal = 180 }: { value?: number; goal?: number
 }
 
 /* ───────── Viz 2: Heat-Map Shoe (Foot Strike / Landing Zone) ───────── */
-function HeatMapShoe({ zone = "midfoot" }: { zone?: "heel" | "midfoot" | "toe" }) {
-  const heelColor = zone === "heel" ? "#ef4444" : "#e8edf2";
-  const midColor = zone === "midfoot" ? "#22c55e" : "#e8edf2";
-  const toeColor = zone === "toe" ? "#f59e0b" : "#e8edf2";
+function HeatMapShoe({
+  zone = "midfoot",
+  heelPct,
+  midPct,
+  forePct,
+}: {
+  zone?: "heel" | "midfoot" | "forefoot";
+  heelPct?: number | null;
+  midPct?: number | null;
+  forePct?: number | null;
+}) {
+  const heelColor = zone === "heel" ? "#ef4444" : "#efefef";
+  const midColor = zone === "midfoot" ? "#22c55e" : "#efefef";
+  const foreColor = zone === "forefoot" ? "#f59e0b" : "#efefef";
+  const labelColor = zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b";
+  const label = zone === "midfoot" ? "✓ Midfoot Strike" : zone === "heel" ? "⚠ Heel Strike" : "⚠ Forefoot Strike";
+
+  const fmtPct = (v: number | null | undefined) => (v != null ? `${Math.round(v)}%` : "");
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 2, mb: 1 }}>
-      <svg width="200" height="100" viewBox="0 0 200 100">
+      <svg width="200" height="110" viewBox="0 0 200 110" style={{ userSelect: "none" }}>
         {/* Shoe outline */}
         <path
           d="M30,75 Q20,70 18,55 Q16,40 25,30 Q35,18 55,15 Q80,12 110,14 Q140,16 160,22 Q175,28 182,42 Q188,55 185,68 Q182,78 170,80 L30,80 Z"
@@ -142,16 +156,18 @@ function HeatMapShoe({ zone = "midfoot" }: { zone?: "heel" | "midfoot" | "toe" }
         <ellipse cx="45" cy="58" rx="20" ry="16" fill={heelColor} opacity="0.7" />
         {/* Midfoot zone */}
         <ellipse cx="105" cy="50" rx="30" ry="18" fill={midColor} opacity="0.7" />
-        {/* Toe zone */}
-        <ellipse cx="165" cy="48" rx="18" ry="14" fill={toeColor} opacity="0.7" />
+        {/* Forefoot zone */}
+        <ellipse cx="165" cy="48" rx="18" ry="14" fill={foreColor} opacity="0.7" />
         {/* Labels */}
-        <text x="45" y="62" textAnchor="middle" fontSize="9" fontWeight="600" fill="#555">Heel</text>
-        <text x="105" y="54" textAnchor="middle" fontSize="9" fontWeight="600" fill="#555">Mid</text>
-        <text x="165" y="52" textAnchor="middle" fontSize="9" fontWeight="600" fill="#555">Toe</text>
+        <text x="45" y="60" textAnchor="middle" fontSize="8" fontWeight="600" fill="#555">Heel</text>
+        <text x="45" y="70" textAnchor="middle" fontSize="8" fill="#777">{fmtPct(heelPct)}</text>
+        <text x="105" y="52" textAnchor="middle" fontSize="8" fontWeight="600" fill="#555">Mid</text>
+        <text x="105" y="62" textAnchor="middle" fontSize="8" fill="#777">{fmtPct(midPct)}</text>
+        <text x="165" y="50" textAnchor="middle" fontSize="8" fontWeight="600" fill="#555">Fore</text>
+        <text x="165" y="60" textAnchor="middle" fontSize="8" fill="#777">{fmtPct(forePct)}</text>
         {/* Active indicator */}
-        <text x="100" y="95" textAnchor="middle" fontSize="11" fontWeight="700"
-          fill={zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b"}>
-          {zone === "midfoot" ? "✓ Midfoot Strike" : zone === "heel" ? "⚠ Heel Strike" : "⚠ Toe Strike"}
+        <text x="100" y="100" textAnchor="middle" fontSize="11" fontWeight="700" fill={labelColor}>
+          {label}
         </text>
       </svg>
     </Box>
@@ -202,30 +218,45 @@ function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?:
 }
 
 /* ───────── Viz 4: Shock Waveform (Impact / Landing Impact) ───────── */
-function ShockWaveform() {
-  // Simulated waveform data — each value is a peak G-force
-  const points = [0.8, 1.5, 0.9, 2.1, 1.2, 0.7, 1.8, 1.0, 2.4, 1.3, 0.6, 1.6, 0.9, 1.1, 2.0];
-  const threshold = 2.0;
+function ShockWaveform({
+  points = [],
+  threshold = 4.0,
+}: {
+  points?: number[];
+  threshold?: number;
+}) {
   const w = 260;
   const h = 80;
-  const stepX = w / (points.length - 1);
+
+  // Need at least 2 points to draw a line; pad with nulls shown as dots
+  if (points.length === 0) {
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 2, mb: 1 }}>
+        <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+          Complete a run to see your impact history
+        </Typography>
+      </Box>
+    );
+  }
+
+  const maxG = Math.max(...points, threshold) * 1.1;
+  const stepX = points.length > 1 ? w / (points.length - 1) : w;
+  const yOf = (v: number) => h - (v / maxG) * h;
+  const thresholdY = yOf(threshold);
 
   const pathD = points
-    .map((v, i) => {
-      const x = i * stepX;
-      const y = h - (v / 3) * h;
-      return `${i === 0 ? "M" : "L"}${x},${y}`;
-    })
+    .map((v, i) => `${i === 0 ? "M" : "L"}${i * stepX},${yOf(v)}`)
     .join(" ");
 
-  const thresholdY = h - (threshold / 3) * h;
+  // Y-axis labels: 0, midpoint, max
+  const gridVals = [0, +(maxG / 2).toFixed(1), +maxG.toFixed(1)];
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 2, mb: 1 }}>
       <svg width="260" height="110" viewBox="0 0 260 110" style={{ maxWidth: "100%" }}>
         {/* Grid lines */}
-        {[1, 2, 3].map((g) => {
-          const y = h - (g / 3) * h;
+        {gridVals.map((g) => {
+          const y = yOf(g);
           return (
             <g key={g}>
               <line x1="0" y1={y} x2={w} y2={y} stroke="#eee" strokeWidth="1" />
@@ -236,13 +267,16 @@ function ShockWaveform() {
         {/* Threshold line */}
         <line x1="0" y1={thresholdY} x2={w} y2={thresholdY}
           stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5,3" opacity="0.6" />
+        <text x="2" y={thresholdY - 3} fontSize="8" fill="#ef4444" opacity="0.8">limit</text>
         {/* Waveform line */}
-        <path d={pathD} fill="none" stroke="#5b9bd5" strokeWidth="2.5"
-          strokeLinecap="round" strokeLinejoin="round" />
-        {/* Peak dots */}
+        {points.length > 1 && (
+          <path d={pathD} fill="none" stroke="#5b9bd5" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {/* Dots */}
         {points.map((v, i) => {
           const x = i * stepX;
-          const y = h - (v / 3) * h;
+          const y = yOf(v);
           const isHigh = v >= threshold;
           return (
             <circle key={i} cx={x} cy={y} r={isHigh ? 4 : 3}
@@ -251,7 +285,7 @@ function ShockWaveform() {
         })}
         {/* Bottom label */}
         <text x={w / 2} y="105" textAnchor="middle" fontSize="10" fontWeight="500" fill="#888">
-          Impact per step (G-force)
+          Avg impact per run (G-force) · {points.length} run{points.length !== 1 ? "s" : ""}
         </text>
       </svg>
     </Box>
@@ -304,16 +338,55 @@ function InfoPopover({ summary }: { summary: string }) {
 }
 
 /* ───────────── Skill Visualization Router ───────────── */
-function SkillVisualization({ skillId }: { skillId: number }) {
+function SkillVisualization({
+  skillId,
+  hasData,
+  cadence,
+  gct,
+  strikeZone,
+  heelPct,
+  midPct,
+  forePct,
+  shockPoints,
+  shockThreshold,
+}: {
+  skillId: number;
+  hasData: boolean;
+  cadence: number | null;
+  gct: number | null;
+  strikeZone: "heel" | "midfoot" | "forefoot";
+  heelPct: number | null;
+  midPct: number | null;
+  forePct: number | null;
+  shockPoints: number[];
+  shockThreshold: number;
+}) {
+  if (!hasData && skillId !== 4) {
+    return (
+      <Box sx={{ textAlign: "center", py: 3 }}>
+        <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+          Complete a run to see your stats
+        </Typography>
+      </Box>
+    );
+  }
+
   switch (skillId) {
     case 1:
-      return <TargetRing />;
+      return <TargetRing value={Math.round(cadence ?? 0)} goal={180} />;
     case 2:
-      return <HeatMapShoe />;
+      return (
+        <HeatMapShoe
+          zone={strikeZone}
+          heelPct={heelPct}
+          midPct={midPct}
+          forePct={forePct}
+        />
+      );
     case 3:
-      return <SpringGauge />;
+      return <SpringGauge value={Math.round(gct ?? 0)} proLine={220} />;
     case 4:
-      return <ShockWaveform />;
+      return <ShockWaveform points={shockPoints} threshold={shockThreshold} />;
     default:
       return null;
   }
@@ -381,7 +454,13 @@ interface RunRecord {
   date: string;
   distance_m: number;
   duration_s: number;
-  avg_pace: string | null;
+  avg_pace:     string | null;
+  avg_cadence:  number | null;
+  avg_gct:      number | null;
+  avg_shock:    number | null;
+  heel_pct:     number | null;
+  midfoot_pct:  number | null;
+  forefoot_pct: number | null;
 }
 
 /* ════════════════════════════ DASHBOARD PAGE ═════════════════════════════ */
@@ -390,12 +469,13 @@ export default function DashboardPage() {
   const [navValue, setNavValue] = useState(0);
   const [username, setUsername] = useState("");
   const [lastRun, setLastRun] = useState<RunRecord | null>(null);
+  const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem("username");
     if (stored) setUsername(stored);
 
-    // Fetch the most recent run
+    // Fetch the most recent runs (backend returns newest-first)
     const token = localStorage.getItem("access_token");
     if (token) {
       fetch(`${API_BASE}/runs`, {
@@ -407,12 +487,49 @@ export default function DashboardPage() {
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data?.runs?.length > 0) {
-            setLastRun(data.runs[0]); // newest first
+            const runs: RunRecord[] = data.runs;
+            setLastRun(runs[0]);                  // newest for the Last Run card
+            setRecentRuns(runs.slice(0, 10));     // up to 10 for skill aggregates
           }
         })
         .catch(() => {});
     }
   }, []);
+
+  /* ── Compute skill aggregates from the last ≤10 runs ── */
+  const strideRuns = recentRuns.filter((r) => r.avg_cadence != null);
+
+  const mean = (vals: (number | null)[]): number | null => {
+    const valid = vals.filter((v): v is number => v != null);
+    return valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+  };
+
+  const aggCadence  = mean(strideRuns.map((r) => r.avg_cadence));
+  const aggGct      = mean(strideRuns.map((r) => r.avg_gct));
+  const aggHeelPct  = mean(strideRuns.map((r) => r.heel_pct));
+  const aggMidPct   = mean(strideRuns.map((r) => r.midfoot_pct));
+  const aggForePct  = mean(strideRuns.map((r) => r.forefoot_pct));
+
+  // Dominant strike zone — whichever averaged % is highest
+  const dominantZone: "heel" | "midfoot" | "forefoot" =
+    aggHeelPct != null && aggMidPct != null && aggForePct != null
+      ? aggHeelPct >= aggMidPct && aggHeelPct >= aggForePct
+        ? "heel"
+        : aggForePct > aggMidPct
+        ? "forefoot"
+        : "midfoot"
+      : "midfoot";
+
+  // Shock waveform: avg_shock per run, oldest → newest (left → right)
+  const shockPoints: number[] = [...recentRuns]
+    .reverse()
+    .map((r) => r.avg_shock)
+    .filter((v): v is number => v != null);
+
+  const avgShock    = mean(shockPoints);
+  const shockThresh = avgShock != null ? +(avgShock * 1.15).toFixed(2) : 4.0;
+
+  const hasStrideData = strideRuns.length > 0;
 
   return (
     <Box
@@ -620,7 +737,18 @@ export default function DashboardPage() {
                         justifyContent: "center",
                       }}
                     >
-                      <SkillVisualization skillId={skill.id} />
+                      <SkillVisualization
+                        skillId={skill.id}
+                        hasData={hasStrideData}
+                        cadence={aggCadence}
+                        gct={aggGct}
+                        strikeZone={dominantZone}
+                        heelPct={aggHeelPct}
+                        midPct={aggMidPct}
+                        forePct={aggForePct}
+                        shockPoints={shockPoints}
+                        shockThreshold={shockThresh}
+                      />
                     </Box>
                   </CardContent>
                 </Card>
