@@ -145,6 +145,7 @@ export default function SetupPage() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "1",
         },
         body: JSON.stringify({
           height: heightCm || null,

@@ -30,6 +30,9 @@ import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
+/* ─────────────────────── Constants ──────────────────────── */
+const NODE_URL = process.env.NEXT_PUBLIC_NODE_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
+
 /* ──────────────────── Calibration Types ──────────────────── */
 type CalibrationState = "idle" | "calibrating" | "complete";
 const CALIBRATION_DURATION = 4; // seconds
@@ -379,7 +382,7 @@ export default function RecordPage() {
     {
       id: "wifi",
       label: "Wi-Fi Connection",
-      description: "Stable connection to Arduino sensor",
+      description: "Stable connection to STRIDE node sensor",
       status: "checking",
       detail: "",
       icon: <WifiIcon sx={{ fontSize: 22, color: "#5b9bd5" }} />,
@@ -430,79 +433,26 @@ export default function RecordPage() {
   const checkWifi = useCallback(async () => {
     updateCheck("wifi", "checking", "");
 
-    // Basic online check
-    if (!navigator.onLine) {
+    try {
+      const start = performance.now();
+      const res = await fetch(`${NODE_URL}/health`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(4000),
+      });
+      const latency = Math.round(performance.now() - start);
+      const data = await res.json();
+      if (data?.status === "online") {
+        const quality = latency < 50 ? "excellent" : latency < 150 ? "good" : latency < 400 ? "fair" : "poor";
+        updateCheck("wifi", latency < 400 ? "passed" : "warning", `STRIDE node online · ${latency}ms latency (${quality})`);
+      } else {
+        updateCheck("wifi", "failed", "STRIDE node responded but status is not 'online'.");
+      }
+    } catch {
       updateCheck(
         "wifi",
         "failed",
-        "No internet connection. Connect to Wi-Fi to communicate with the Arduino."
+        "Cannot reach STRIDE node. Make sure you're on the same Wi-Fi network."
       );
-      return;
-    }
-
-    // Use the Network Information API if available to check connection quality
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const conn = (navigator as any).connection;
-
-    if (conn) {
-      const type = conn.type; // wifi, cellular, ethernet, etc.
-      const downlink = conn.downlink; // Mbps
-
-      if (type === "wifi" || type === "ethernet") {
-        if (downlink && downlink >= 1) {
-          updateCheck(
-            "wifi",
-            "passed",
-            `Connected via ${type.toUpperCase()} (${downlink} Mbps). Ready for WebSocket.`
-          );
-        } else {
-          updateCheck(
-            "wifi",
-            "warning",
-            `Connected via ${type.toUpperCase()} but speed is low. WebSocket may be unstable.`
-          );
-        }
-      } else if (type === "cellular") {
-        updateCheck(
-          "wifi",
-          "warning",
-          "On cellular data. Wi-Fi is recommended for stable Arduino communication."
-        );
-      } else {
-        updateCheck(
-          "wifi",
-          "passed",
-          "Network connection detected. Ready for WebSocket."
-        );
-      }
-    } else {
-      // Network Information API not available — just confirm we're online
-      // Do a quick latency check by fetching a tiny resource
-      try {
-        const start = performance.now();
-        await fetch(window.location.origin, { method: "HEAD", cache: "no-store" });
-        const latency = Math.round(performance.now() - start);
-
-        if (latency < 500) {
-          updateCheck(
-            "wifi",
-            "passed",
-            `Online with ${latency}ms latency. Ready for WebSocket.`
-          );
-        } else {
-          updateCheck(
-            "wifi",
-            "warning",
-            `Online but high latency (${latency}ms). WebSocket may be unstable.`
-          );
-        }
-      } catch {
-        updateCheck(
-          "wifi",
-          "passed",
-          "Online. Ready for WebSocket communication."
-        );
-      }
     }
   }, [updateCheck]);
 
@@ -539,31 +489,56 @@ export default function RecordPage() {
   const checkProfile = useCallback(async () => {
     updateCheck("profile", "checking", "");
 
-    // TODO: Replace with real data from backend/context
-    // Simulating a check against stored user profile data
-    const userProfile = {
-      weight: "160", // would come from state/DB
-      height: "68", // would come from state/DB
-    };
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      updateCheck("profile", "failed", "Not logged in. Please sign in to load your profile.");
+      return;
+    }
 
-    const hasWeight = userProfile.weight && Number(userProfile.weight) > 0;
-    const hasHeight = userProfile.height && Number(userProfile.height) > 0;
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const res = await fetch(`${apiUrl}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "1",
+        },
+        cache: "no-store",
+      });
 
-    if (hasWeight && hasHeight) {
-      updateCheck(
-        "profile",
-        "passed",
-        `Weight: ${userProfile.weight} lbs · Height: ${userProfile.height} in`
-      );
-    } else {
-      const missing = [];
-      if (!hasWeight) missing.push("weight");
-      if (!hasHeight) missing.push("height");
-      updateCheck(
-        "profile",
-        "failed",
-        `Missing: ${missing.join(" & ")}. Required for force & stride calculations.`
-      );
+      if (!res.ok) {
+        updateCheck("profile", "failed", "Could not load profile. Please sign in again.");
+        return;
+      }
+
+      const data = await res.json();
+
+      // Backend stores metric (kg, cm) — convert to imperial for display
+      const weightKg = Number(data.weight);
+      const heightCm = Number(data.height);
+      const hasWeight = data.weight && weightKg > 0;
+      const hasHeight = data.height && heightCm > 0;
+
+      if (hasWeight && hasHeight) {
+        const weightLbs = Math.round(weightKg * 2.20462);
+        const heightIn = Math.round(heightCm / 2.54);
+        updateCheck(
+          "profile",
+          "passed",
+          `Weight: ${weightLbs} lbs · Height: ${heightIn} in`
+        );
+      } else {
+        const missing = [];
+        if (!hasWeight) missing.push("weight");
+        if (!hasHeight) missing.push("height");
+        updateCheck(
+          "profile",
+          "failed",
+          `Missing: ${missing.join(" & ")}. Required for force & stride calculations.`
+        );
+      }
+    } catch (err) {
+      console.error("[checkProfile]", err);
+      updateCheck("profile", "failed", "Could not reach the server to verify your profile.");
     }
   }, [updateCheck]);
 
@@ -626,14 +601,8 @@ export default function RecordPage() {
       prev.map((c) => ({ ...c, status: "checking" as CheckStatus, detail: "" }))
     );
 
-    // Stagger checks slightly for visual feedback
-    await checkWifi();
-    await new Promise((r) => setTimeout(r, 300));
-    await checkBackground();
-    await new Promise((r) => setTimeout(r, 300));
-    await checkProfile();
-    await new Promise((r) => setTimeout(r, 300));
-    await checkGPS();
+    // Run all checks in parallel
+    await Promise.all([checkWifi(), checkBackground(), checkProfile(), checkGPS()]);
   }, [checkWifi, checkBackground, checkProfile, checkGPS]);
 
   /* ── Run on mount ── */
@@ -662,22 +631,48 @@ export default function RecordPage() {
   const anyFailed = checks.some((c) => c.status === "failed");
 
   /* ── Handle profile fix from dialog ── */
-  const handleProfileFix = () => {
+  const handleProfileFix = async () => {
     if (
-      missingWeight &&
-      missingHeight &&
-      Number(missingWeight) > 0 &&
-      Number(missingHeight) > 0
-    ) {
-      // TODO: Save to backend/context
-      updateCheck(
-        "profile",
-        "passed",
-        `Weight: ${missingWeight} lbs · Height: ${missingHeight} in`
-      );
+      !missingWeight ||
+      !missingHeight ||
+      Number(missingWeight) <= 0 ||
+      Number(missingHeight) <= 0
+    ) return;
+
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    // Convert imperial (lbs, in) → metric (kg, cm) for the backend
+    const weightKg = (Number(missingWeight) / 2.20462).toFixed(2);
+    const heightCm = (Number(missingHeight) * 2.54).toFixed(2);
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "1",
+        },
+        body: JSON.stringify({ weight: weightKg, height: heightCm }),
+      });
+
+      if (res.ok) {
+        updateCheck(
+          "profile",
+          "passed",
+          `Weight: ${missingWeight} lbs · Height: ${missingHeight} in`
+        );
+        setProfileDialogOpen(false);
+        setMissingWeight("");
+        setMissingHeight("");
+      } else {
+        setProfileDialogOpen(false);
+        checkProfile();
+      }
+    } catch {
       setProfileDialogOpen(false);
-      setMissingWeight("");
-      setMissingHeight("");
+      checkProfile();
     }
   };
 
@@ -925,7 +920,7 @@ export default function RecordPage() {
                   disabled={!allPassed || isChecking}
                   onClick={() => {
                     setCalibration("calibrating");
-                    fetch("http://172.31.89.83:8000/calibrate", { method: "POST" }).catch(() => {});
+                    fetch(`${NODE_URL}/calibrate`, { method: "POST" }).catch(() => {});
                   }}
                   sx={{
                     py: 2,
@@ -985,7 +980,7 @@ export default function RecordPage() {
           {calibration === "complete" && (
             <CalibrationComplete
               onContinue={() => {
-                fetch("http://172.31.89.83:8000/start", { method: "POST" }).catch(() => {});
+                fetch(`${NODE_URL}/start`, { method: "POST" }).catch(() => {});
                 router.push("/run");
               }}
             />

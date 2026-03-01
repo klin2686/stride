@@ -45,9 +45,9 @@ type EditableField = keyof ProfileFormData | null;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /* ───────────────────── Unit Conversion Helpers ──────────────────── */
-const lbsToKg = (lbs: number) => Math.round(lbs * 0.453592);
+const lbsToKg = (lbs: number) => +(lbs * 0.453592).toFixed(2);
 const kgToLbs = (kg: number) => Math.round(kg / 0.453592);
-const inToCm = (inches: number) => Math.round(inches * 2.54);
+const inToCm = (inches: number) => +(inches * 2.54).toFixed(2);
 const cmToIn = (cm: number) => Math.round(cm / 2.54);
 
 /** Convert a metric-stored profile to the given display unit system. */
@@ -150,7 +150,7 @@ export default function ProfilePage() {
 
     try {
       const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, "ngrok-skip-browser-warning": "1" },
       });
 
       if (!res.ok) {
@@ -253,6 +253,7 @@ export default function ProfilePage() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "1",
         },
         body: JSON.stringify(metricPayload),
       });
