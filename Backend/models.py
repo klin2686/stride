@@ -29,3 +29,11 @@ class Run(Base):
     duration_s = Column(Integer, nullable=False)          # elapsed time in seconds
     avg_pace = Column(String)                             # e.g. "8:32" (min/mi)
     created_at = Column(DateTime, server_default=func.now())
+
+    # ── Stride metric aggregates (collected during the run) ──
+    avg_cadence   = Column(Float)   # average cadence (SPM)
+    avg_gct       = Column(Float)   # average ground contact time (ms)
+    avg_shock     = Column(Float)   # average impact shock (G)
+    heel_pct      = Column(Float)   # % of readings that were Heel Strike
+    midfoot_pct   = Column(Float)   # % of readings that were Midfoot Strike
+    forefoot_pct  = Column(Float)   # % of readings that were Forefoot Strike

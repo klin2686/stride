@@ -218,9 +218,17 @@ def get_stats(current_user: User = Depends(get_current_user)):
 
 
 class SaveRunRequest(BaseModel):
-    distance_m: float      # distance in meters
-    duration_s: int        # elapsed time in seconds
+    distance_m: float          # distance in meters
+    duration_s: int            # elapsed time in seconds
     avg_pace: str | None = None  # e.g. "8:32"
+
+    # ── Stride metric aggregates ──
+    avg_cadence:  float | None = None  # average cadence (SPM)
+    avg_gct:      float | None = None  # average ground contact time (ms)
+    avg_shock:    float | None = None  # average impact shock (G)
+    heel_pct:     float | None = None  # % Heel Strike readings
+    midfoot_pct:  float | None = None  # % Midfoot Strike readings
+    forefoot_pct: float | None = None  # % Forefoot Strike readings
 
 
 @app.post("/runs", status_code=status.HTTP_201_CREATED)
@@ -244,6 +252,12 @@ def save_run(
         distance_m=body.distance_m,
         duration_s=body.duration_s,
         avg_pace=body.avg_pace,
+        avg_cadence=body.avg_cadence,
+        avg_gct=body.avg_gct,
+        avg_shock=body.avg_shock,
+        heel_pct=body.heel_pct,
+        midfoot_pct=body.midfoot_pct,
+        forefoot_pct=body.forefoot_pct,
     )
     db.add(run)
     db.commit()
@@ -254,6 +268,12 @@ def save_run(
         "distance_m": run.distance_m,
         "duration_s": run.duration_s,
         "avg_pace": run.avg_pace,
+        "avg_cadence": run.avg_cadence,
+        "avg_gct": run.avg_gct,
+        "avg_shock": run.avg_shock,
+        "heel_pct": run.heel_pct,
+        "midfoot_pct": run.midfoot_pct,
+        "forefoot_pct": run.forefoot_pct,
     }
 
 
@@ -277,6 +297,12 @@ def get_runs(
                 "distance_m": r.distance_m,
                 "duration_s": r.duration_s,
                 "avg_pace": r.avg_pace,
+                "avg_cadence": r.avg_cadence,
+                "avg_gct": r.avg_gct,
+                "avg_shock": r.avg_shock,
+                "heel_pct": r.heel_pct,
+                "midfoot_pct": r.midfoot_pct,
+                "forefoot_pct": r.forefoot_pct,
             }
             for r in runs
         ]

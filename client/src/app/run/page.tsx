@@ -570,6 +570,12 @@ export default function RunPage() {
   const [strideData, setStrideData] = useState<StrideData>(DEFAULT_STRIDE_DATA);
   const [shockHistory, setShockHistory] = useState<number[]>([]);
 
+  /* ── Metric accumulators (for end-of-run averages / strike distribution) ── */
+  const cadenceSamplesRef  = useRef<number[]>([]);
+  const gctSamplesRef      = useRef<number[]>([]);
+  const shockSamplesRef    = useRef<number[]>([]);
+  const strikeCountsRef    = useRef({ heel: 0, midfoot: 0, forefoot: 0 });
+
   /* ── Computed goals (recalculated when profile or shock baseline changes) ── */
   const goals = calculateGoals(userProfile, shockBaselineComputed ?? undefined);
 
@@ -658,6 +664,17 @@ export default function RunPage() {
             shock: typeof d.shock === "number" ? d.shock : prev.shock,
             strike: typeof d.strike === "string" ? d.strike : prev.strike,
           }));
+
+          // ── Accumulate metric samples for end-of-run aggregates ──
+          if (typeof d.cadence === "number") cadenceSamplesRef.current.push(d.cadence);
+          if (typeof d.gct     === "number") gctSamplesRef.current.push(d.gct);
+          if (typeof d.shock   === "number") shockSamplesRef.current.push(d.shock);
+          if (typeof d.strike  === "string") {
+            const s = d.strike.toLowerCase();
+            if (s.includes("heel"))         strikeCountsRef.current.heel++;
+            else if (s.includes("midfoot") || s.includes("mid")) strikeCountsRef.current.midfoot++;
+            else                             strikeCountsRef.current.forefoot++;
+          }
 
           // ── Shock rolling baseline (first 60 seconds) ──
           if (typeof d.shock === "number") {
@@ -862,6 +879,23 @@ export default function RunPage() {
     if (token && distanceMeters > 0) {
       const miles = distanceMeters / 1609.344;
       const avgPace = formatPace(miles, elapsedSeconds);
+
+      // ── Compute metric aggregates ──
+      const avg = (arr: number[]) =>
+        arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+
+      const totalStrikes =
+        strikeCountsRef.current.heel +
+        strikeCountsRef.current.midfoot +
+        strikeCountsRef.current.forefoot;
+
+      const pct = (n: number) =>
+        totalStrikes > 0 ? +((n / totalStrikes) * 100).toFixed(1) : null;
+
+      const cadenceAvg = avg(cadenceSamplesRef.current);
+      const gctAvg     = avg(gctSamplesRef.current);
+      const shockAvg   = avg(shockSamplesRef.current);
+
       fetch(`${API_BASE}/runs`, {
         method: "POST",
         headers: {
@@ -869,9 +903,15 @@ export default function RunPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          distance_m: distanceMeters,
-          duration_s: elapsedSeconds,
-          avg_pace: avgPace,
+          distance_m:   distanceMeters,
+          duration_s:   elapsedSeconds,
+          avg_pace:     avgPace,
+          avg_cadence:  cadenceAvg !== null ? +cadenceAvg.toFixed(1) : null,
+          avg_gct:      gctAvg     !== null ? +gctAvg.toFixed(1)     : null,
+          avg_shock:    shockAvg   !== null ? +shockAvg.toFixed(2)   : null,
+          heel_pct:     pct(strikeCountsRef.current.heel),
+          midfoot_pct:  pct(strikeCountsRef.current.midfoot),
+          forefoot_pct: pct(strikeCountsRef.current.forefoot),
         }),
       })
         .then((res) => {

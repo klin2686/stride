@@ -31,6 +31,12 @@ interface RunRecord {
   distance_m: number;
   duration_s: number;
   avg_pace: string | null;
+  avg_cadence:  number | null;
+  avg_gct:      number | null;
+  avg_shock:    number | null;
+  heel_pct:     number | null;
+  midfoot_pct:  number | null;
+  forefoot_pct: number | null;
 }
 
 /* ─────────────────── Helpers ─────────────────── */
@@ -58,6 +64,94 @@ function formatTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/* ─────────────────── Small display helpers ─────────────────── */
+function MetricChip({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.4,
+        bgcolor: `${color}18`,
+        borderRadius: 2,
+        px: 1,
+        py: 0.35,
+      }}
+    >
+      <Typography sx={{ fontSize: "0.65rem", fontWeight: 600, color, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#1a1a1a" }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function StrikeChip({
+  heel,
+  midfoot,
+  forefoot,
+}: {
+  heel: number | null;
+  midfoot: number | null;
+  forefoot: number | null;
+}) {
+  // Pick the dominant strike type
+  const values: [string, number | null][] = [
+    ["Heel", heel],
+    ["Midfoot", midfoot],
+    ["Forefoot", forefoot],
+  ];
+  const dominant = values
+    .filter(([, v]) => v != null)
+    .sort((a, b) => (b[1] as number) - (a[1] as number))[0];
+
+  if (!dominant) return null;
+
+  const [name, pct] = dominant;
+  const color = name === "Midfoot" ? "#22c55e" : name === "Heel" ? "#ef4444" : "#f59e0b";
+
+  const breakdown = values
+    .filter(([, v]) => v != null && v > 0)
+    .map(([n, v]) => `${n} ${v}%`)
+    .join(" · ");
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.4,
+        bgcolor: `${color}18`,
+        borderRadius: 2,
+        px: 1,
+        py: 0.35,
+      }}
+    >
+      <Typography sx={{ fontSize: "0.65rem", fontWeight: 600, color, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        Strike
+      </Typography>
+      <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#1a1a1a" }}>
+        {name} {pct}%
+      </Typography>
+      {breakdown && (
+        <Typography sx={{ fontSize: "0.62rem", color: "text.secondary", ml: 0.25 }}>
+          ({breakdown})
+        </Typography>
+      )}
+    </Box>
+  );
 }
 
 /* ════════════════════════════ RUNS PAGE ═════════════════════════════ */
@@ -229,70 +323,105 @@ export default function RunsPage() {
             >
               {runs.map((run, idx) => {
                 const miles = (run.distance_m / 1609.344).toFixed(2);
+                const hasStride =
+                  run.avg_cadence != null ||
+                  run.avg_gct != null ||
+                  run.avg_shock != null;
+                const hasStrike =
+                  run.heel_pct != null ||
+                  run.midfoot_pct != null ||
+                  run.forefoot_pct != null;
+
                 return (
                   <Box key={run.id}>
                     {idx > 0 && <Divider />}
-                    <CardContent
-                      sx={{
-                        p: 2,
-                        "&:last-child": { pb: 2 },
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 2,
-                      }}
-                    >
-                      {/* Run icon */}
-                      <Box
-                        sx={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 2.5,
-                          bgcolor: "rgba(91,155,213,0.1)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <DirectionsRunIcon sx={{ fontSize: 22, color: "#5b9bd5" }} />
-                      </Box>
-
-                      {/* Details */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
-                          <CalendarTodayIcon sx={{ fontSize: 13, color: "text.secondary" }} />
-                          <Typography sx={{ fontWeight: 600, fontSize: "0.85rem", color: "#1a1a1a" }}>
-                            {formatDate(run.date)}
-                          </Typography>
+                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                      {/* ── Top row: icon + date + run metrics ── */}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        {/* Run icon */}
+                        <Box
+                          sx={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 2.5,
+                            bgcolor: "rgba(91,155,213,0.1)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <DirectionsRunIcon sx={{ fontSize: 22, color: "#5b9bd5" }} />
                         </Box>
-                        <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                          {formatTime(run.date)}
-                        </Typography>
-                      </Box>
 
-                      {/* Metrics */}
-                      <Box sx={{ textAlign: "right", flexShrink: 0 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5, mb: 0.25 }}>
-                          <StraightenIcon sx={{ fontSize: 14, color: "#5b9bd5" }} />
-                          <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", color: "#1a1a1a" }}>
-                            {miles} mi
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5 }}>
-                          <AccessTimeIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+                        {/* Date / time */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
+                            <CalendarTodayIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+                            <Typography sx={{ fontWeight: 600, fontSize: "0.85rem", color: "#1a1a1a" }}>
+                              {formatDate(run.date)}
+                            </Typography>
+                          </Box>
                           <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                            {formatDuration(run.duration_s)}
+                            {formatTime(run.date)}
                           </Typography>
-                          {run.avg_pace && run.avg_pace !== "--:--" && (
-                            <>
-                              <SpeedIcon sx={{ fontSize: 13, color: "text.secondary", ml: 0.5 }} />
-                              <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                                {run.avg_pace}/mi
-                              </Typography>
-                            </>
+                        </Box>
+
+                        {/* Distance / duration / pace */}
+                        <Box sx={{ textAlign: "right", flexShrink: 0 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5, mb: 0.25 }}>
+                            <StraightenIcon sx={{ fontSize: 14, color: "#5b9bd5" }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", color: "#1a1a1a" }}>
+                              {miles} mi
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5 }}>
+                            <AccessTimeIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+                            <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                              {formatDuration(run.duration_s)}
+                            </Typography>
+                            {run.avg_pace && run.avg_pace !== "--:--" && (
+                              <>
+                                <SpeedIcon sx={{ fontSize: 13, color: "text.secondary", ml: 0.5 }} />
+                                <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                                  {run.avg_pace}/mi
+                                </Typography>
+                              </>
+                            )}
+                          </Box>
+                        </Box>
+                      </Box>
+
+                      {/* ── Stride metric chips ── */}
+                      {(hasStride || hasStrike) && (
+                        <Box
+                          sx={{
+                            mt: 1.5,
+                            pt: 1.5,
+                            borderTop: "1px solid rgba(0,0,0,0.06)",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 0.75,
+                          }}
+                        >
+                          {run.avg_cadence != null && (
+                            <MetricChip label="Cadence" value={`${run.avg_cadence} SPM`} color="#5b9bd5" />
+                          )}
+                          {run.avg_gct != null && (
+                            <MetricChip label="Contact" value={`${run.avg_gct} ms`} color="#8ec8e8" />
+                          )}
+                          {run.avg_shock != null && (
+                            <MetricChip label="Shock" value={`${run.avg_shock} G`} color="#a78bfa" />
+                          )}
+                          {hasStrike && (
+                            <StrikeChip
+                              heel={run.heel_pct}
+                              midfoot={run.midfoot_pct}
+                              forefoot={run.forefoot_pct}
+                            />
                           )}
                         </Box>
-                      </Box>
+                      )}
                     </CardContent>
                   </Box>
                 );
