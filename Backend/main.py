@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
 import models
-from models import User
+from models import User, Run
 from auth import (
     create_access_token,
     decode_access_token,
@@ -212,3 +212,72 @@ def get_stats(current_user: User = Depends(get_current_user)):
     if not current_user.stats:
         return {"stats": None}
     return {"stats": json.loads(current_user.stats)}
+
+
+# ─────────────────── Run History ───────────────────
+
+
+class SaveRunRequest(BaseModel):
+    distance_m: float      # distance in meters
+    duration_s: int        # elapsed time in seconds
+    avg_pace: str | None = None  # e.g. "8:32"
+
+
+@app.post("/runs", status_code=status.HTTP_201_CREATED)
+def save_run(
+    body: SaveRunRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Save a completed run.
+
+    Request format:
+    {
+        "distance_m": <distance_m: float>,
+        "duration_s": <duration_s: int>,
+        "avg_pace": <avg_pace: str | null>
+    }
+    """
+    run = Run(
+        user_id=current_user.id,
+        distance_m=body.distance_m,
+        duration_s=body.duration_s,
+        avg_pace=body.avg_pace,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return {
+        "id": run.id,
+        "date": run.date.isoformat() if run.date else None,
+        "distance_m": run.distance_m,
+        "duration_s": run.duration_s,
+        "avg_pace": run.avg_pace,
+    }
+
+
+@app.get("/runs")
+def get_runs(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return all runs for the authenticated user, newest first."""
+    runs = (
+        db.query(Run)
+        .filter(Run.user_id == current_user.id)
+        .order_by(Run.date.desc())
+        .all()
+    )
+    return {
+        "runs": [
+            {
+                "id": r.id,
+                "date": r.date.isoformat() if r.date else None,
+                "distance_m": r.distance_m,
+                "duration_s": r.duration_s,
+                "avg_pace": r.avg_pace,
+            }
+            for r in runs
+        ]
+    }

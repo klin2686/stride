@@ -355,15 +355,63 @@ function TrendLine() {
   );
 }
 
+/* ─────────────────── Constants ─────────────────── */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+/* ─────────────────── Helpers ─────────────────── */
+function formatDuration(totalSeconds: number): string {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins} min`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/* ─────────────── Last Run type ─────────────── */
+interface RunRecord {
+  id: number;
+  date: string;
+  distance_m: number;
+  duration_s: number;
+  avg_pace: string | null;
+}
+
 /* ════════════════════════════ DASHBOARD PAGE ═════════════════════════════ */
 export default function DashboardPage() {
   const router = useRouter();
   const [navValue, setNavValue] = useState(0);
   const [username, setUsername] = useState("");
+  const [lastRun, setLastRun] = useState<RunRecord | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("username");
     if (stored) setUsername(stored);
+
+    // Fetch the most recent run
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      fetch(`${API_BASE}/runs`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "ngrok-skip-browser-warning": "1",
+        },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.runs?.length > 0) {
+            setLastRun(data.runs[0]); // newest first
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   return (
@@ -445,26 +493,44 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* 3 · Last Run Card */}
+        {/* 3 · Last Run Card (clickable → /runs) */}
         <Card
+          onClick={() => router.push("/runs")}
           sx={{
             borderRadius: 3,
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
             mb: 2.5,
+            cursor: "pointer",
+            transition: "box-shadow 0.2s ease",
+            "&:hover": { boxShadow: "0 2px 12px rgba(0,0,0,0.1)" },
           }}
         >
           <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
-            <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", mb: 0.5 }}>
-              Last Run
-            </Typography>
-            <Typography sx={{ color: "text.secondary", fontSize: "0.9rem" }}>
-              Tuesday May 5
-            </Typography>
-            <Typography
-              sx={{ color: "text.secondary", fontSize: "0.9rem", mt: 0.25 }}
-            >
-              3.2 mi &nbsp;|&nbsp; 32 min
-            </Typography>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                Last Run
+              </Typography>
+              <Typography sx={{ fontSize: "0.75rem", color: "#5b9bd5", fontWeight: 600 }}>
+                View all →
+              </Typography>
+            </Box>
+            {lastRun ? (
+              <>
+                <Typography sx={{ color: "text.secondary", fontSize: "0.9rem" }}>
+                  {formatDate(lastRun.date)}
+                </Typography>
+                <Typography
+                  sx={{ color: "text.secondary", fontSize: "0.9rem", mt: 0.25 }}
+                >
+                  {(lastRun.distance_m / 1609.344).toFixed(2)} mi &nbsp;|&nbsp; {formatDuration(lastRun.duration_s)}
+                  {lastRun.avg_pace && lastRun.avg_pace !== "--:--" ? ` · ${lastRun.avg_pace}/mi` : ""}
+                </Typography>
+              </>
+            ) : (
+              <Typography sx={{ color: "text.secondary", fontSize: "0.9rem" }}>
+                No runs yet — go for your first run!
+              </Typography>
+            )}
           </CardContent>
         </Card>
 

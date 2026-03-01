@@ -856,8 +856,33 @@ export default function RunPage() {
       navigator.geolocation.clearWatch(watchIdRef.current);
     }
     setConfirmStop(false);
-    router.push("/record");
-  }, [router]);
+
+    // ── Save run to backend ──
+    const token = localStorage.getItem("access_token");
+    if (token && distanceMeters > 0) {
+      const miles = distanceMeters / 1609.344;
+      const avgPace = formatPace(miles, elapsedSeconds);
+      fetch(`${API_BASE}/runs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          distance_m: distanceMeters,
+          duration_s: elapsedSeconds,
+          avg_pace: avgPace,
+        }),
+      })
+        .then((res) => {
+          if (res.ok) console.log("[Run] Saved successfully");
+          else console.warn("[Run] Failed to save:", res.status);
+        })
+        .catch((err) => console.warn("[Run] Save error:", err));
+    }
+
+    router.push("/dashboard");
+  }, [router, distanceMeters, elapsedSeconds]);
 
   const handleBack = useCallback(() => {
     router.push("/record");
