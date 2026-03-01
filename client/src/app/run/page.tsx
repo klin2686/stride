@@ -376,8 +376,11 @@ function SpringGauge({
 
 /* ═══════════════ Viz 4: Shock Waveform (Impact) — Compact ═══════════════ */
 function ShockWaveform({ history, threshold }: { history: number[]; threshold: number }) {
-  const points = history.length > 0 ? history : [];
-  if (points.length === 0) {
+  const w = 120;
+  const h = 55;
+  const maxG = 5; // scale Y-axis: 0 to 5G
+
+  if (history.length === 0) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 75 }}>
         <Typography sx={{ fontSize: "0.75rem", color: "#bbb" }}>Waiting for data…</Typography>
@@ -387,25 +390,28 @@ function ShockWaveform({ history, threshold }: { history: number[]; threshold: n
       </Box>
     );
   }
-  const w = 120;
-  const h = 55;
-  const stepX = w / (points.length - 1);
 
-  const pathD = points
+  // Always plot against 20 slots so the graph scrolls smoothly
+  const maxSlots = 20;
+  const stepX = w / (maxSlots - 1);
+  const thresholdY = h - (threshold / maxG) * h;
+
+  const pathD = history
     .map((v, i) => {
-      const x = i * stepX;
-      const y = h - (v / 3) * h;
+      // Right-align points: newest point is always at the right edge
+      const slotIndex = maxSlots - history.length + i;
+      const x = slotIndex * stepX;
+      const y = h - Math.min(v / maxG, 1) * h;
       return `${i === 0 ? "M" : "L"}${x},${y}`;
     })
     .join(" ");
 
-  const thresholdY = h - (threshold / 3) * h;
-
   return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <svg width="140" height="75" viewBox="0 0 140 75" style={{ maxWidth: "100%" }}>
-        {[1, 2, 3].map((g) => {
-          const y = h - (g / 3) * h;
+        {/* Grid lines */}
+        {[1, 2, 3, 4].map((g) => {
+          const y = h - (g / maxG) * h;
           return (
             <g key={g}>
               <line x1="0" y1={y} x2={w} y2={y} stroke="#eee" strokeWidth="0.5" />
@@ -413,13 +419,17 @@ function ShockWaveform({ history, threshold }: { history: number[]; threshold: n
             </g>
           );
         })}
+        {/* Threshold / spike line */}
         <line x1="0" y1={thresholdY} x2={w} y2={thresholdY}
           stroke="#ef4444" strokeWidth="1" strokeDasharray="3,2" opacity="0.6" />
+        {/* Waveform path */}
         <path d={pathD} fill="none" stroke="#5b9bd5" strokeWidth="2"
           strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((v, i) => {
-          const x = i * stepX;
-          const y = h - (v / 3) * h;
+        {/* Data points */}
+        {history.map((v, i) => {
+          const slotIndex = maxSlots - history.length + i;
+          const x = slotIndex * stepX;
+          const y = h - Math.min(v / maxG, 1) * h;
           const isHigh = v >= threshold;
           return (
             <circle key={i} cx={x} cy={y} r={isHigh ? 3 : 2}
