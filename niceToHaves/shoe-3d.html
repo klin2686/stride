@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stride — 3D Shoe Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      overflow: hidden;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: rgba(10, 10, 20, 0.9);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #fff;
+    }
+
+    header h1 span {
+      color: #5b9bd5;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.06);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Canvas wrapper ── */
+    #canvas-wrap {
+      flex: 1 1 auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* ── HUD overlay ── */
+    #hud {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(10, 10, 20, 0.82);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 14px 18px;
+      min-width: 220px;
+      z-index: 5;
+    }
+
+    #hud h2 {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+      margin-bottom: 10px;
+    }
+
+    .accel-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .accel-row:last-child { margin-bottom: 0; }
+
+    .accel-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      width: 22px;
+      color: rgba(255,255,255,0.6);
+      font-variant-numeric: tabular-nums;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+
+    .bar-wrap {
+      flex: 1;
+      height: 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.08s linear;
+    }
+
+    .bar-ax { background: #ef4444; }
+    .bar-ay { background: #22c55e; }
+    .bar-az { background: #5b9bd5; }
+
+    .accel-val {
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: rgba(255,255,255,0.75);
+      width: 58px;
+      text-align: right;
+    }
+
+    /* ── Info panel top-right ── */
+    #info {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(10,10,20,0.75);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 12px;
+      padding: 12px 16px;
+      z-index: 5;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.45);
+      line-height: 1.7;
+    }
+
+    #info strong {
+      color: rgba(255,255,255,0.75);
+      font-weight: 600;
+    }
+
+    .metric-pair {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .metric-pair span { font-family: "SF Mono", "Fira Code", monospace; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>STRIDE <span>/</span> Shoe Visualizer</h1>
+  <div class="status-pill">
+    <div class="status-dot"></div>
+    Sample Data
+  </div>
+</header>
+
+<div id="canvas-wrap">
+  <!-- Three.js renders here -->
+
+  <!-- Accel HUD -->
+  <div id="hud">
+    <h2>Accelerometer</h2>
+    <div class="accel-row">
+      <div class="accel-label">ax</div>
+      <div class="bar-wrap"><div class="bar-fill bar-ax" id="bar-ax"></div></div>
+      <div class="accel-val" id="val-ax">0.00 g</div>
+    </div>
+    <div class="accel-row">
+      <div class="accel-label">ay</div>
+      <div class="bar-wrap"><div class="bar-fill bar-ay" id="bar-ay"></div></div>
+      <div class="accel-val" id="val-ay">0.00 g</div>
+    </div>
+    <div class="accel-row">
+      <div class="accel-label">az</div>
+      <div class="bar-wrap"><div class="bar-fill bar-az" id="bar-az"></div></div>
+      <div class="accel-val" id="val-az">0.00 g</div>
+    </div>
+  </div>
+
+  <!-- Orientation info -->
+  <div id="info">
+    <div class="metric-pair">
+      <strong>Pitch</strong><span id="val-pitch">0.0°</span>
+    </div>
+    <div class="metric-pair">
+      <strong>Roll</strong><span id="val-roll">0.0°</span>
+    </div>
+    <div class="metric-pair">
+      <strong>|a|</strong><span id="val-mag">9.81 g</span>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js from CDN -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ─────────────────────────────────────────────────
+   SCENE SETUP
+───────────────────────────────────────────────── */
+const wrap = document.getElementById('canvas-wrap');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+scene.fog = new THREE.Fog(0x0a0a0f, 8, 18);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
+camera.position.set(2.8, 1.6, 3.2);
+camera.lookAt(0, 0.15, 0);
+
+/* ─────────────────────────────────────────────────
+   LIGHTING
+───────────────────────────────────────────────── */
+// Ambient
+scene.add(new THREE.AmbientLight(0x1a1a2e, 4));
+
+// Key light
+const keyLight = new THREE.DirectionalLight(0xffffff, 3.5);
+keyLight.position.set(3, 5, 4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.near = 0.1;
+keyLight.shadow.camera.far = 20;
+keyLight.shadow.camera.left = -3;
+keyLight.shadow.camera.right = 3;
+keyLight.shadow.camera.top = 3;
+keyLight.shadow.camera.bottom = -3;
+scene.add(keyLight);
+
+// Fill light (cool blue from opposite side)
+const fillLight = new THREE.DirectionalLight(0x4488ff, 1.2);
+fillLight.position.set(-3, 2, -2);
+scene.add(fillLight);
+
+// Rim light (top-back)
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+rimLight.position.set(0, 4, -3);
+scene.add(rimLight);
+
+// Accent point light (under the shoe, subtle glow)
+const glowLight = new THREE.PointLight(0x5b9bd5, 2, 2.5);
+glowLight.position.set(0, -0.5, 0);
+scene.add(glowLight);
+
+/* ─────────────────────────────────────────────────
+   GRID / GROUND
+───────────────────────────────────────────────── */
+const gridHelper = new THREE.GridHelper(10, 20, 0x1a1a2e, 0x1a1a2e);
+gridHelper.position.y = -0.5;
+scene.add(gridHelper);
+
+// Reflective ground plane
+const groundGeo = new THREE.PlaneGeometry(12, 12);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x0d0d1a,
+  roughness: 0.9,
+  metalness: 0.05,
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.502;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ─────────────────────────────────────────────────
+   MATERIALS
+───────────────────────────────────────────────── */
+const matSole = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.9, metalness: 0.1 });
+const matMidsole = new THREE.MeshStandardMaterial({ color: 0xdde4ef, roughness: 0.6, metalness: 0.05 });
+const matUpper = new THREE.MeshStandardMaterial({ color: 0x1a4d8f, roughness: 0.5, metalness: 0.15 });
+const matUpperLight = new THREE.MeshStandardMaterial({ color: 0x2d6fc7, roughness: 0.45, metalness: 0.2 });
+const matHeel = new THREE.MeshStandardMaterial({ color: 0x0f2f5c, roughness: 0.6, metalness: 0.1 });
+const matTongue = new THREE.MeshStandardMaterial({ color: 0x3178cf, roughness: 0.55, metalness: 0.1 });
+const matLace = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0 });
+const matAccent = new THREE.MeshStandardMaterial({ color: 0x5b9bd5, roughness: 0.4, metalness: 0.3, emissive: 0x1a3a5c, emissiveIntensity: 0.4 });
+
+/* ─────────────────────────────────────────────────
+   SHOE GEOMETRY — procedural assembly
+   All coords are in shoe-local space:
+     +X = right (lateral)
+     +Y = up
+     +Z = backward (heel direction)
+   Shoe length: ~2 units  width: ~0.7 units
+───────────────────────────────────────────────── */
+const shoeGroup = new THREE.Group();
+scene.add(shoeGroup);
+
+function addMesh(geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.set(rx, ry, rz);
+  mesh.scale.set(sx, sy, sz);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  shoeGroup.add(mesh);
+  return mesh;
+}
+
+// ── Outsole (bottom rubber) ──
+const soleGeo = new THREE.BoxGeometry(0.68, 0.08, 2.0);
+addMesh(soleGeo, matSole, 0, -0.26, 0);
+
+// Toe rocker — small wedge shape via scaled box
+const toeRockerGeo = new THREE.BoxGeometry(0.65, 0.09, 0.35);
+addMesh(toeRockerGeo, matSole, 0, -0.22, -0.9, 0.22, 0, 0);
+
+// ── Midsole (foam) ──
+const midsoleGeo = new THREE.BoxGeometry(0.62, 0.18, 1.88);
+addMesh(midsoleGeo, matMidsole, 0, -0.13, 0.02);
+
+// Heel stack (extra height at heel for cushioning look)
+const heelStackGeo = new THREE.BoxGeometry(0.62, 0.12, 0.55);
+addMesh(heelStackGeo, matMidsole, 0, -0.05, 0.72);
+
+// ── Upper body ──
+// Main upper — slightly trapezoidal feel via two boxes
+const upperMainGeo = new THREE.BoxGeometry(0.6, 0.38, 1.5);
+addMesh(upperMainGeo, matUpper, 0, 0.14, 0.1);
+
+// Toe box (slightly wider, rounded feel)
+const toeBoxGeo = new THREE.BoxGeometry(0.58, 0.28, 0.52);
+addMesh(toeBoxGeo, matUpperLight, 0, 0.07, -0.73);
+
+// Toe cap overlay
+const toeCapGeo = new THREE.SphereGeometry(0.31, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+addMesh(toeCapGeo, matUpperLight, 0, 0.01, -0.94, -Math.PI / 2, 0, 0, 1, 0.72, 0.95);
+
+// ── Heel counter ──
+const heelGeo = new THREE.BoxGeometry(0.6, 0.46, 0.44);
+addMesh(heelGeo, matHeel, 0, 0.1, 0.82);
+
+// Heel logo accent strip
+const heelAccentGeo = new THREE.BoxGeometry(0.02, 0.22, 0.4);
+addMesh(heelAccentGeo, matAccent, 0.31, 0.12, 0.82);
+addMesh(heelAccentGeo, matAccent, -0.31, 0.12, 0.82);
+
+// ── Collar (ankle opening lip) ──
+const collarGeo = new THREE.TorusGeometry(0.26, 0.04, 8, 24, Math.PI);
+addMesh(collarGeo, matHeel, 0, 0.35, 0.72, 0, 0, 0);
+
+// ── Tongue ──
+const tongueGeo = new THREE.BoxGeometry(0.34, 0.42, 0.06);
+addMesh(tongueGeo, matTongue, 0, 0.19, -0.16);
+
+// ── Lace eyelets area (overlay panel) ──
+const lacePanelGeo = new THREE.BoxGeometry(0.28, 0.36, 0.9);
+addMesh(lacePanelGeo, matUpperLight, 0, 0.2, -0.05, 0, 0, 0, 1, 1, 1);
+
+// ── Laces (horizontal cylinders) ──
+const laceGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.42, 6);
+const lacePositionsZ = [-0.4, -0.25, -0.1, 0.05, 0.2, 0.35];
+lacePositionsZ.forEach((z, i) => {
+  const yOff = i * 0.032;
+  addMesh(laceGeo, matLace, 0, 0.28 + yOff, z, 0, 0, Math.PI / 2);
+});
+
+// ── Side stripe / accent ──
+const stripeGeo = new THREE.BoxGeometry(0.02, 0.12, 1.1);
+addMesh(stripeGeo, matAccent, 0.31, 0.16, -0.08);
+addMesh(stripeGeo, matAccent, -0.31, 0.16, -0.08);
+
+// ── Sole edge highlight ──
+const soleEdgeGeo = new THREE.BoxGeometry(0.04, 0.08, 1.88);
+addMesh(soleEdgeGeo, matAccent, 0.33, -0.13, 0.02);
+addMesh(soleEdgeGeo, matAccent, -0.33, -0.13, 0.02);
+
+// Center the shoe so it pivots from center of mass
+shoeGroup.position.set(0, 0.15, 0);
+
+/* ─────────────────────────────────────────────────
+   SAMPLE DATA GENERATOR
+   Simulates a runner's foot striking the ground:
+   - ay stays near 9.81g (gravity) with bouncing
+   - ax oscillates laterally (pronation/supination)
+   - az oscillates fore-aft (heel strike / toe off)
+───────────────────────────────────────────────── */
+let sensorData = { ax: 0, ay: 9.81, az: 0 };
+
+function generateSampleData(t) {
+  // Simulate running gait cycle (~180 SPM = 3 Hz, period ~0.33s)
+  const gaitFreq = 3.0;
+  const gaitPhase = t * gaitFreq * Math.PI * 2;
+
+  // Impact impulses at heel strike
+  const impactPulse = Math.max(0, Math.cos(gaitPhase)) ** 8 * 2.5;
+
+  const ax = 0.25 * Math.sin(gaitPhase * 0.5 + 0.3)          // lateral sway
+           + 0.04 * (Math.random() - 0.5);                    // noise
+
+  const ay = 9.81                                             // gravity
+           + impactPulse                                      // impact spike
+           + 0.35 * Math.sin(gaitPhase + 0.1)                // bounce
+           + 0.08 * (Math.random() - 0.5);                   // noise
+
+  const az = 0.4 * Math.sin(gaitPhase + Math.PI / 4)         // fore-aft (heel/toe)
+           + 0.06 * (Math.random() - 0.5);                   // noise
+
+  return { ax, ay, az };
+}
+
+/* ─────────────────────────────────────────────────
+   WEBSOCKET (stubbed — uncomment and set URL to use)
+───────────────────────────────────────────────── */
+// const WS_URL = 'ws://localhost:8000/ws';
+// function connectWS() {
+//   const ws = new WebSocket(WS_URL);
+//   ws.onmessage = (evt) => {
+//     try {
+//       const msg = JSON.parse(evt.data);
+//       // Arduino bridge sends: { ax, ay, az, gx, gy, gz, timestamp_ms }
+//       if (msg.ax !== undefined) {
+//         sensorData = { ax: msg.ax, ay: msg.ay, az: msg.az };
+//       }
+//     } catch {}
+//   };
+//   ws.onclose = () => setTimeout(connectWS, 2000); // auto-reconnect
+// }
+// connectWS();
+
+/* ─────────────────────────────────────────────────
+   HUD DOM REFS
+───────────────────────────────────────────────── */
+const barAx = document.getElementById('bar-ax');
+const barAy = document.getElementById('bar-ay');
+const barAz = document.getElementById('bar-az');
+const valAx = document.getElementById('val-ax');
+const valAy = document.getElementById('val-ay');
+const valAz = document.getElementById('val-az');
+const valPitch = document.getElementById('val-pitch');
+const valRoll  = document.getElementById('val-roll');
+const valMag   = document.getElementById('val-mag');
+
+function updateHUD(ax, ay, az) {
+  // Bar widths: normalize to [-2g, +2g] range (100% = 2g)
+  const pct = (v) => Math.min(100, Math.abs(v) / 2 * 100).toFixed(1) + '%';
+  barAx.style.width = pct(ax);
+  barAy.style.width = Math.min(100, Math.abs(ay) / 12 * 100).toFixed(1) + '%'; // ay goes up to ~12g
+  barAz.style.width = pct(az);
+
+  const fmt = (v) => (v >= 0 ? '+' : '') + v.toFixed(3) + ' g';
+  valAx.textContent = fmt(ax);
+  valAy.textContent = fmt(ay);
+  valAz.textContent = fmt(az);
+
+  // Pitch: forward/backward tilt (deg)
+  const pitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az)) * 180 / Math.PI;
+  // Roll: left/right tilt (deg)
+  const roll  = Math.atan2(-az, ay) * 180 / Math.PI;
+  // Magnitude
+  const mag   = Math.sqrt(ax * ax + ay * ay + az * az);
+
+  valPitch.textContent = pitch.toFixed(1) + '°';
+  valRoll.textContent  = roll.toFixed(1) + '°';
+  valMag.textContent   = mag.toFixed(3) + ' g';
+
+  return { pitch, roll };
+}
+
+/* ─────────────────────────────────────────────────
+   SMOOTH ROTATION (low-pass filter)
+───────────────────────────────────────────────── */
+let smoothPitch = 0;
+let smoothRoll  = 0;
+const ALPHA = 0.08; // smoothing factor (lower = smoother/slower)
+
+/* ─────────────────────────────────────────────────
+   CAMERA SLOW ORBIT
+───────────────────────────────────────────────── */
+let cameraAngle = 0;
+const ORBIT_RADIUS = 4.0;
+const ORBIT_SPEED  = 0.06; // rad/s
+
+/* ─────────────────────────────────────────────────
+   RESIZE HANDLER
+───────────────────────────────────────────────── */
+function onResize() {
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+onResize();
+window.addEventListener('resize', onResize);
+
+/* ─────────────────────────────────────────────────
+   RENDER LOOP
+───────────────────────────────────────────────── */
+let lastTime = performance.now();
+
+function animate(now) {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // cap delta at 50ms
+  lastTime = now;
+  const t  = now / 1000; // seconds
+
+  // ── Generate / read sensor data ──
+  const { ax, ay, az } = generateSampleData(t);
+  sensorData = { ax, ay, az };
+
+  // ── Update HUD ──
+  const { pitch, roll } = updateHUD(ax, ay, az);
+
+  // ── Smooth the rotation angles ──
+  // Convert degrees to radians for Three.js
+  const targetPitch = pitch * Math.PI / 180;
+  const targetRoll  = roll  * Math.PI / 180;
+
+  smoothPitch += (targetPitch - smoothPitch) * ALPHA;
+  smoothRoll  += (targetRoll  - smoothRoll)  * ALPHA;
+
+  // Apply to shoe group — pitch tilts fore/aft, roll tilts left/right
+  shoeGroup.rotation.x = smoothPitch * 0.6;  // scale down to not over-rotate
+  shoeGroup.rotation.z = smoothRoll  * 0.4;
+
+  // Subtle hover bob
+  shoeGroup.position.y = 0.15 + 0.02 * Math.sin(t * 2.1);
+
+  // ── Slow camera orbit ──
+  cameraAngle += ORBIT_SPEED * dt;
+  camera.position.x = Math.sin(cameraAngle) * ORBIT_RADIUS;
+  camera.position.z = Math.cos(cameraAngle) * ORBIT_RADIUS;
+  camera.position.y = 1.6 + 0.3 * Math.sin(cameraAngle * 0.5);
+  camera.lookAt(0, 0.15, 0);
+
+  // ── Accent light pulse on impact ──
+  const mag = Math.sqrt(ax * ax + ay * ay + az * az);
+  const impactIntensity = Math.max(0, (mag - 10) / 4); // lights up when |a| > 10g
+  glowLight.intensity = 2 + impactIntensity * 6;
+  glowLight.color.setHSL(0.6, 1, 0.5 + impactIntensity * 0.3);
+
+  renderer.render(scene, camera);
+}
+
+requestAnimationFrame(animate);
+</script>
+
+</body>
+</html>
