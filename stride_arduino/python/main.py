@@ -35,11 +35,13 @@ cfg = {
     "impact_shock_window_ms": 50,
     "toe_off_gyro_threshold_dps": 470.0,
     "toe_off_accel_threshold_g": 1.5,
-    "min_stance_duration_ms": 100,
+    "min_stance_duration_ms": 150,
+    "min_swing_duration_ms": 200,
     "cadence_low_spm": 160,
     "cadence_high_spm": 190,
-    "heel_strike_deg": 5.0,
-    "forefoot_strike_deg": -5.0,
+    "strike_lookback_ms": 50,
+    "heel_strike_deg": 35.0,
+    "forefoot_strike_deg": 20.0,
     "tuning_mode": False,
 }
 
@@ -70,6 +72,7 @@ calibrated = False
 gait_phase = GaitPhase.SWING
 last_impact_ts = 0
 current_impact_ts = 0
+last_toe_off_ts = 0
 tracking_shock = False
 shock_peak_g = 0.0
 shock_end_ts = 0
@@ -321,7 +324,7 @@ def finish_calibration():
     avg_ay = sum_ay / n
     avg_az = sum_az / n
 
-    baseline_pitch_rad = math.atan2(avg_ay, math.sqrt(avg_ax ** 2 + avg_az ** 2))
+    baseline_pitch_rad = math.atan2(avg_ax, math.sqrt(avg_ay ** 2 + avg_az ** 2))
     calibrated = True
     state = State.IDLE
 
@@ -368,7 +371,8 @@ def process_running(samples: list[dict]):
         # ---- Gait state machine ----
         if gait_phase == GaitPhase.SWING:
             debounce_ok = (ts - last_impact_ts) > cfg["impact_debounce_ms"]
-            if a_mag > cfg["impact_threshold_g"] and debounce_ok:
+            swing_ok = (ts - last_toe_off_ts) > cfg["min_swing_duration_ms"]
+            if a_mag > cfg["impact_threshold_g"] and debounce_ok and swing_ok:
                 _on_impact(s, ts, a_mag)
 
         elif gait_phase == GaitPhase.STANCE:
@@ -410,9 +414,21 @@ def _on_impact(s: dict, ts: int, a_mag: float):
     else:
         cadence_spm = 0.0
 
-    ax, ay, az = s["ax"], s["ay"], s["az"]
-    pitch_rad = math.atan2(ay, math.sqrt(ax * ax + az * az))
-    relative_pitch_deg = math.degrees(pitch_rad - baseline_pitch_rad)
+    target_ts = ts - cfg["strike_lookback_ms"]
+    pre = s
+    for sample in reversed(data_window):
+        if sample["ts"] <= target_ts:
+            pre = sample
+            break
+
+    pax, pay, paz = pre["ax"], pre["ay"], pre["az"]
+    cos_b = math.cos(baseline_pitch_rad)
+    sin_b = math.sin(baseline_pitch_rad)
+    ax_rot = pax * cos_b - paz * sin_b
+    az_rot = pax * sin_b + paz * cos_b
+    relative_pitch_deg = math.degrees(
+        math.atan2(ax_rot, math.sqrt(pay * pay + az_rot * az_rot))
+    )
 
     if relative_pitch_deg > cfg["heel_strike_deg"]:
         strike = "Heel Strike"
@@ -435,10 +451,11 @@ def _on_impact(s: dict, ts: int, a_mag: float):
 
 
 def _on_toe_off(ts: int):
-    global gait_phase
+    global gait_phase, last_toe_off_ts
 
     prev_phase = gait_phase
     gait_phase = GaitPhase.SWING
+    last_toe_off_ts = ts
     gct_ms = ts - current_impact_ts
 
     if cfg["tuning_mode"] and prev_phase != GaitPhase.SWING:
@@ -596,8 +613,10 @@ FEED_HTML = """\
       <label>Toe-Off Gyro (dps)         <input type="number" step="10"   id="toe_off_gyro_threshold_dps"></label>
       <label>Toe-Off Accel (g)          <input type="number" step="0.1"  id="toe_off_accel_threshold_g"></label>
       <label>Min Stance (ms)            <input type="number" step="10"   id="min_stance_duration_ms"></label>
+      <label>Min Swing (ms)             <input type="number" step="10"   id="min_swing_duration_ms"></label>
       <label>Cadence Low (SPM)          <input type="number" step="5"    id="cadence_low_spm"></label>
       <label>Cadence High (SPM)         <input type="number" step="5"    id="cadence_high_spm"></label>
+      <label>Strike Lookback (ms)       <input type="number" step="5"    id="strike_lookback_ms"></label>
       <label>Heel Strike (&deg;)        <input type="number" step="0.5"  id="heel_strike_deg"></label>
       <label>Forefoot Strike (&deg;)    <input type="number" step="0.5"  id="forefoot_strike_deg"></label>
     </div>
@@ -629,7 +648,7 @@ function post(path) {
 const CFG_KEYS = [
   "impact_threshold_g", "impact_debounce_ms", "impact_shock_window_ms",
   "toe_off_gyro_threshold_dps", "toe_off_accel_threshold_g", "min_stance_duration_ms",
-  "cadence_low_spm", "cadence_high_spm", "heel_strike_deg", "forefoot_strike_deg"
+  "min_swing_duration_ms", "cadence_low_spm", "cadence_high_spm", "strike_lookback_ms", "heel_strike_deg", "forefoot_strike_deg"
 ];
 
 function loadConfig() {
