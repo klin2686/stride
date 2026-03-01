@@ -29,6 +29,8 @@ const coachingTips = [
       "Don\u2019t overreach your strides. Instead, let your feet land directly under your center of mass.",
     imageSrc:
       "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?q=80&w=1000&auto=format&fit=crop",
+    articleUrl:
+      "https://www.runnersworld.com/training/a20811825/proper-running-form/",
   },
   {
     id: 2,
@@ -36,6 +38,8 @@ const coachingTips = [
       "Keep a tall posture. Lean slightly from the ankles, not your waist, to let gravity pull you forward.",
     imageSrc:
       "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?q=80&w=1000&auto=format&fit=crop",
+    articleUrl:
+      "https://www.nytimes.com/guides/well/how-to-start-running",
   },
   {
     id: 3,
@@ -43,6 +47,8 @@ const coachingTips = [
       "Imagine running on hot coals. Quick, light steps keep your ground contact time low and reduce impact stress.",
     imageSrc:
       "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?q=80&w=1000&auto=format&fit=crop",
+    articleUrl:
+      "https://www.healthline.com/health/fitness-exercise/running-tips",
   },
 ];
 
@@ -925,6 +931,10 @@ export default function DashboardPage() {
                 {coachingTips.map((tip) => (
                   <SwiperSlide key={tip.id}>
                     <Box
+                      component="a"
+                      href={tip.articleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       sx={{
                         position: "relative",
                         borderRadius: 3,
@@ -936,6 +946,9 @@ export default function DashboardPage() {
                         display: "flex",
                         alignItems: "flex-end",
                         p: 2.5,
+                        textDecoration: "none",
+                        cursor: "pointer",
+                        WebkitTapHighlightColor: "transparent",
                       }}
                     >
                       {/* Gradient overlay for readability */}
