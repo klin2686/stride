@@ -13,13 +13,16 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Divider from "@mui/material/Divider";
+import Popover from "@mui/material/Popover";
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import StopIcon from "@mui/icons-material/Stop";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import SpeedIcon from "@mui/icons-material/Speed";
 import StraightenIcon from "@mui/icons-material/Straighten";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Map, { Marker, Source, Layer, type MapRef } from "react-map-gl/mapbox";
 import type { LayerProps } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -32,6 +35,10 @@ const NODE_WS_URL = NODE_URL.replace(/^https?/, NODE_URL.startsWith("https") ? "
 // Default viewport — Irvine, CA
 const DEFAULT_CENTER = { longitude: -117.826166, latitude: 33.684566 };
 const DEFAULT_ZOOM = 15;
+
+/* ─── Collapsed / expanded drawer heights ─── */
+const COLLAPSED_HEIGHT = 290; // px – compact metrics + buttons
+const EXPANDED_HEIGHT_VH = 82; // vh – 2×2 skill grid view
 
 /* ─────────────────── Helper: format time ─────────────────── */
 function formatTime(totalSeconds: number): string {
@@ -86,6 +93,283 @@ const routeLineStyle: LayerProps = {
   },
 };
 
+/* ══════════════════ Stride Sensor Data Types ═══════════════════ */
+interface StrideData {
+  cadence: number; // steps per minute
+  gct: number; // ground contact time in ms
+  shock: number; // impact shock in g
+  strike: string; // e.g. "Forefoot Strike", "Heel Strike", "Midfoot Strike"
+}
+
+const DEFAULT_STRIDE_DATA: StrideData = {
+  cadence: 172,
+  gct: 235,
+  shock: 1.8,
+  strike: "Midfoot Strike",
+};
+
+/* ═══════════════ Skill Metric Definitions ═══════════════════ */
+interface SkillMetric {
+  id: number;
+  label: string;
+  title: string;
+  summary: string;
+}
+
+const skillMetrics: SkillMetric[] = [
+  {
+    id: 1,
+    label: "SKILL 1",
+    title: "Step Rhythm",
+    summary:
+      "This tracks how many steps you take every minute. Maintaining a quicker, shorter rhythm reduces the heavy \u201Cthud\u201D on your knees and keeps your momentum moving forward.",
+  },
+  {
+    id: 2,
+    label: "SKILL 2",
+    title: "Landing Zone",
+    summary:
+      "This identifies which part of your foot hits the ground first. Landing on your midfoot helps you stay balanced and significantly lowers your risk of common running injuries.",
+  },
+  {
+    id: 3,
+    label: "SKILL 3",
+    title: "Ground Spring",
+    summary:
+      "This measures how many milliseconds your foot stays in contact with the pavement. A \u201Csnappier\u201D spring off the ground means you\u2019re running light and efficient rather than heavy and slow.",
+  },
+  {
+    id: 4,
+    label: "SKILL 4",
+    title: "Landing Impact",
+    summary:
+      "This measures the \u201CG-force\u201D your legs absorb each time you land. Keeping this impact low is the secret to protecting your shins and joints from long-term wear and tear.",
+  },
+];
+
+/* ═══════════════ Viz 1: Target Ring (Cadence) — Compact ═══════════════ */
+function TargetRing({ value = 168, goal = 180 }: { value?: number; goal?: number }) {
+  const pct = Math.min(value / goal, 1);
+  const radius = 34;
+  const stroke = 7;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - pct);
+  const color = pct >= 0.9 ? "#22c55e" : pct >= 0.7 ? "#5b9bd5" : "#f59e0b";
+
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width="90" height="90" viewBox="0 0 90 90">
+        <circle cx="45" cy="45" r={radius} fill="none" stroke="#e8edf2" strokeWidth={stroke} />
+        <circle
+          cx="45" cy="45" r={radius}
+          fill="none" stroke={color} strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          transform="rotate(-90 45 45)"
+          style={{ transition: "stroke-dashoffset 0.6s ease" }}
+        />
+        <text x="45" y="42" textAnchor="middle" fontSize="20" fontWeight="700" fill="#1a1a1a">
+          {value}
+        </text>
+        <text x="45" y="56" textAnchor="middle" fontSize="9" fontWeight="500" fill="#888">
+          SPM
+        </text>
+      </svg>
+    </Box>
+  );
+}
+
+/* ═══════════════ Viz 2: Heat-Map Shoe (Foot Strike) — Compact ═══════════════ */
+function HeatMapShoe({ zone = "midfoot" }: { zone?: "heel" | "midfoot" | "toe" }) {
+  const heelColor = zone === "heel" ? "#ef4444" : "#e8edf2";
+  const midColor = zone === "midfoot" ? "#22c55e" : "#e8edf2";
+  const toeColor = zone === "toe" ? "#f59e0b" : "#e8edf2";
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <svg width="130" height="65" viewBox="0 0 200 100" style={{ maxWidth: "100%" }}>
+        <path
+          d="M30,75 Q20,70 18,55 Q16,40 25,30 Q35,18 55,15 Q80,12 110,14 Q140,16 160,22 Q175,28 182,42 Q188,55 185,68 Q182,78 170,80 L30,80 Z"
+          fill="none" stroke="#ccc" strokeWidth="2.5"
+        />
+        <ellipse cx="45" cy="58" rx="20" ry="16" fill={heelColor} opacity="0.7" />
+        <ellipse cx="105" cy="50" rx="30" ry="18" fill={midColor} opacity="0.7" />
+        <ellipse cx="165" cy="48" rx="18" ry="14" fill={toeColor} opacity="0.7" />
+        <text x="45" y="62" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Heel</text>
+        <text x="105" y="54" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Mid</text>
+        <text x="165" y="52" textAnchor="middle" fontSize="10" fontWeight="600" fill="#555">Toe</text>
+      </svg>
+      <Typography
+        sx={{
+          fontSize: "0.65rem",
+          fontWeight: 700,
+          mt: 0.25,
+          color: zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b",
+        }}
+      >
+        {zone === "midfoot" ? "✓ Midfoot" : zone === "heel" ? "⚠ Heel" : "⚠ Toe"}
+      </Typography>
+    </Box>
+  );
+}
+
+/* ═══════════════ Viz 3: Spring Gauge (Ground Contact Time) — Compact ═══════════════ */
+function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?: number }) {
+  const maxVal = 350;
+  const barHeight = 60;
+  const fillPct = Math.min(value / maxVal, 1);
+  const fillH = barHeight * fillPct;
+  const proY = barHeight - (barHeight * (proLine / maxVal));
+  const isGood = value <= proLine;
+  const barColor = isGood ? "#5b9bd5" : "#f97316";
+
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width="90" height="85" viewBox="0 0 90 85">
+        <rect x="25" y="5" width="30" height={barHeight} rx="5" fill="#e8edf2" />
+        <rect
+          x="25" y={5 + barHeight - fillH} width="30" height={fillH}
+          rx="5" fill={barColor}
+          style={{ transition: "all 0.5s ease" }}
+        />
+        <line
+          x1="19" y1={5 + proY} x2="61" y2={5 + proY}
+          stroke="#22c55e" strokeWidth="1.5" strokeDasharray="3,2"
+        />
+        <text x="66" y={5 + proY + 3} fontSize="7" fontWeight="600" fill="#22c55e">
+          Pro
+        </text>
+        <text x="40" y={5 + barHeight - fillH - 4} textAnchor="middle"
+          fontSize="11" fontWeight="700" fill={barColor}>
+          {value}ms
+        </text>
+        <text x="45" y="80" textAnchor="middle" fontSize="8" fontWeight="500" fill="#888">
+          Lower is better
+        </text>
+      </svg>
+    </Box>
+  );
+}
+
+/* ═══════════════ Viz 4: Shock Waveform (Impact) — Compact ═══════════════ */
+function ShockWaveform({ history }: { history: number[] }) {
+  const points = history.length > 0 ? history : [0.8, 1.5, 0.9, 2.1, 1.2, 0.7, 1.8, 1.0, 2.4, 1.3];
+  const threshold = 2.0;
+  const w = 120;
+  const h = 55;
+  const stepX = w / (points.length - 1);
+
+  const pathD = points
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = h - (v / 3) * h;
+      return `${i === 0 ? "M" : "L"}${x},${y}`;
+    })
+    .join(" ");
+
+  const thresholdY = h - (threshold / 3) * h;
+
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width="140" height="75" viewBox="0 0 140 75" style={{ maxWidth: "100%" }}>
+        {[1, 2, 3].map((g) => {
+          const y = h - (g / 3) * h;
+          return (
+            <g key={g}>
+              <line x1="0" y1={y} x2={w} y2={y} stroke="#eee" strokeWidth="0.5" />
+              <text x={w + 3} y={y + 3} fontSize="6" fill="#bbb">{g}G</text>
+            </g>
+          );
+        })}
+        <line x1="0" y1={thresholdY} x2={w} y2={thresholdY}
+          stroke="#ef4444" strokeWidth="1" strokeDasharray="3,2" opacity="0.6" />
+        <path d={pathD} fill="none" stroke="#5b9bd5" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((v, i) => {
+          const x = i * stepX;
+          const y = h - (v / 3) * h;
+          const isHigh = v >= threshold;
+          return (
+            <circle key={i} cx={x} cy={y} r={isHigh ? 3 : 2}
+              fill={isHigh ? "#ef4444" : "#5b9bd5"} />
+          );
+        })}
+        <text x={w / 2} y="70" textAnchor="middle" fontSize="7" fontWeight="500" fill="#888">
+          G-force per step
+        </text>
+      </svg>
+    </Box>
+  );
+}
+
+/* ═══════════════ Info Popover ═══════════════ */
+function InfoPopover({ summary }: { summary: string }) {
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const open = Boolean(anchorEl);
+
+  return (
+    <>
+      <IconButton
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        sx={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          color: "#999",
+          p: 0.5,
+          "&:hover": { color: "#666" },
+        }}
+      >
+        <InfoOutlinedIcon sx={{ fontSize: 20 }} />
+      </IconButton>
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: {
+            sx: {
+              maxWidth: 280,
+              p: 2,
+              borderRadius: 3,
+              boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+            },
+          },
+        }}
+      >
+        <Typography sx={{ fontSize: "0.85rem", lineHeight: 1.6, color: "#444" }}>
+          {summary}
+        </Typography>
+      </Popover>
+    </>
+  );
+}
+
+/* ═══════════════ Skill Visualization Router ═══════════════ */
+function SkillVisualization({ skillId, strideData, shockHistory }: { skillId: number; strideData: StrideData; shockHistory: number[] }) {
+  const strikeZone = strideData.strike.toLowerCase().includes("heel")
+    ? "heel"
+    : strideData.strike.toLowerCase().includes("midfoot") || strideData.strike.toLowerCase().includes("mid")
+    ? "midfoot"
+    : "toe";
+
+  switch (skillId) {
+    case 1:
+      return <TargetRing value={Math.round(strideData.cadence)} />;
+    case 2:
+      return <HeatMapShoe zone={strikeZone} />;
+    case 3:
+      return <SpringGauge value={Math.round(strideData.gct)} />;
+    case 4:
+      return <ShockWaveform history={shockHistory} />;
+    default:
+      return null;
+  }
+}
+
 /* ═══════════════════════ RUN PAGE ════════════════════════════ */
 export default function RunPage() {
   const router = useRouter();
@@ -102,6 +386,14 @@ export default function RunPage() {
   } | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   const [geoDebug, setGeoDebug] = useState("Initializing...");
+
+  /* ── Drawer state ── */
+  const [drawerExpanded, setDrawerExpanded] = useState(false);
+  const touchStartRef = useRef<number | null>(null);
+
+  /* ── Stride sensor data (from Arduino WebSocket) ── */
+  const [strideData, setStrideData] = useState<StrideData>(DEFAULT_STRIDE_DATA);
+  const [shockHistory, setShockHistory] = useState<number[]>([]);
 
   /* ── Refs ── */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -121,6 +413,31 @@ export default function RunPage() {
     const ws = new WebSocket(`${NODE_WS_URL}/ws/app`);
     ws.onmessage = (event) => {
       console.log("[Arduino]", event.data);
+      // Try to parse stride data from Arduino
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg?.data) {
+          const d = msg.data;
+          if (typeof d.cadence === "number") {
+            setStrideData((prev) => ({
+              ...prev,
+              cadence: d.cadence,
+              gct: d.gct ?? prev.gct,
+              shock: d.shock ?? prev.shock,
+              strike: d.strike ?? prev.strike,
+            }));
+            // Append shock to history (keep last 20 points)
+            if (typeof d.shock === "number") {
+              setShockHistory((prev) => {
+                const next = [...prev, d.shock];
+                return next.length > 20 ? next.slice(-20) : next;
+              });
+            }
+          }
+        }
+      } catch {
+        // Not JSON — ignore
+      }
     };
     ws.onerror = (err) => {
       console.error("[Arduino WS error]", err);
@@ -212,20 +529,16 @@ export default function RunPage() {
       console.warn("Geolocation error:", err.code, err.message);
     };
 
-    // Primary: watchPosition with maximumAge=3000 so it can return cached
-    // positions quickly instead of waiting for a brand new GPS fix each time
     watchIdRef.current = navigator.geolocation.watchPosition(
       handlePosition,
       onError,
       {
         enableHighAccuracy: true,
-        maximumAge: 3000,  // accept positions up to 3s old
+        maximumAge: 3000,
         timeout: 10000,
       }
     );
 
-    // Secondary: sequential polling — only requests a new position after
-    // the previous one completes. This avoids jamming the GPS queue on iOS.
     let pollActive = true;
 
     const pollLoop = () => {
@@ -233,22 +546,19 @@ export default function RunPage() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           handlePosition(pos);
-          // Wait 1 second then poll again
           setTimeout(pollLoop, 1000);
         },
         () => {
-          // On error, retry after 2 seconds
           setTimeout(pollLoop, 2000);
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 0,     // force fresh for the poll
+          maximumAge: 0,
           timeout: 8000,
         }
       );
     };
 
-    // Start polling after a short delay to let watchPosition get the first fix
     const pollStartTimer = setTimeout(pollLoop, 2000);
 
     return () => {
@@ -259,7 +569,7 @@ export default function RunPage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount once
+  }, []);
 
   /* ── Derived values ── */
   const distanceMiles = distanceMeters / 1609.344;
@@ -292,20 +602,37 @@ export default function RunPage() {
   }, []);
 
   const handleStopConfirm = useCallback(() => {
-    // Clean up
     if (timerRef.current) clearInterval(timerRef.current);
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
     }
     setConfirmStop(false);
-    // Navigate back to record/dashboard with summary
     router.push("/record");
   }, [router]);
 
   const handleBack = useCallback(() => {
-    // Just minimize — in a real app this might go to a mini-player
     router.push("/record");
   }, [router]);
+
+  /* ── Drawer swipe handlers ── */
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartRef.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartRef.current === null) return;
+      const delta = touchStartRef.current - e.changedTouches[0].clientY;
+      const threshold = 50; // px
+      if (delta > threshold && !drawerExpanded) {
+        setDrawerExpanded(true);
+      } else if (delta < -threshold && drawerExpanded) {
+        setDrawerExpanded(false);
+      }
+      touchStartRef.current = null;
+    },
+    [drawerExpanded]
+  );
 
   return (
     <Box
@@ -341,7 +668,14 @@ export default function RunPage() {
       </Box>
 
       {/* ═══════════ Map Area ═══════════ */}
-      <Box sx={{ position: "absolute", inset: 0, bottom: 280 }}>
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          bottom: drawerExpanded ? `${EXPANDED_HEIGHT_VH}vh` : `${COLLAPSED_HEIGHT}px`,
+          transition: "bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
         <Map
           ref={mapRef}
           initialViewState={{
@@ -361,7 +695,7 @@ export default function RunPage() {
             </Source>
           )}
 
-          {/* User position dot — always visible */}
+          {/* User position dot */}
           <Marker
             longitude={userPosition?.lng ?? DEFAULT_CENTER.longitude}
             latitude={userPosition?.lat ?? DEFAULT_CENTER.latitude}
@@ -375,7 +709,6 @@ export default function RunPage() {
                 justifyContent: "center",
               }}
             >
-              {/* Pulsing outer ring */}
               <Box
                 sx={{
                   position: "absolute",
@@ -385,18 +718,11 @@ export default function RunPage() {
                   bgcolor: "rgba(91,155,213,0.2)",
                   animation: "gps-pulse 2s ease-out infinite",
                   "@keyframes gps-pulse": {
-                    "0%": {
-                      transform: "scale(0.8)",
-                      opacity: 1,
-                    },
-                    "100%": {
-                      transform: "scale(2.2)",
-                      opacity: 0,
-                    },
+                    "0%": { transform: "scale(0.8)", opacity: 1 },
+                    "100%": { transform: "scale(2.2)", opacity: 0 },
                   },
                 }}
               />
-              {/* Inner dot */}
               <Box
                 sx={{
                   width: 18,
@@ -442,14 +768,18 @@ export default function RunPage() {
         </IconButton>
       </Box>
 
-      {/* ═══════════ Bottom Metrics Panel ═══════════ */}
+      {/* ═══════════ Bottom Drawer (Swipe-Up) ═══════════ */}
       <Box
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         sx={{
           position: "absolute",
           bottom: 0,
           left: 0,
           right: 0,
           zIndex: 10,
+          height: drawerExpanded ? `${EXPANDED_HEIGHT_VH}vh` : `${COLLAPSED_HEIGHT}px`,
+          transition: "height 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
           bgcolor: "#f2f2f2",
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
@@ -457,6 +787,9 @@ export default function RunPage() {
           pb: "env(safe-area-inset-bottom, 16px)",
           maxWidth: 600,
           mx: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         {/* ── Drag handle ── */}
@@ -466,7 +799,9 @@ export default function RunPage() {
             justifyContent: "center",
             pt: 1.5,
             pb: 0.5,
+            cursor: "grab",
           }}
+          onClick={() => setDrawerExpanded((prev) => !prev)}
         >
           <Box
             sx={{
@@ -476,6 +811,18 @@ export default function RunPage() {
               bgcolor: "rgba(0,0,0,0.12)",
             }}
           />
+        </Box>
+
+        {/* ── Expand/collapse hint ── */}
+        <Box
+          sx={{ display: "flex", justifyContent: "center", mb: 0.5 }}
+          onClick={() => setDrawerExpanded((prev) => !prev)}
+        >
+          {drawerExpanded ? (
+            <KeyboardArrowDownIcon sx={{ fontSize: 20, color: "rgba(0,0,0,0.3)" }} />
+          ) : (
+            <KeyboardArrowUpIcon sx={{ fontSize: 20, color: "rgba(0,0,0,0.3)" }} />
+          )}
         </Box>
 
         {/* ── Status pill ── */}
@@ -518,8 +865,8 @@ export default function RunPage() {
           </Box>
         </Box>
 
-        {/* ── Metrics Cards ── */}
-        <Box sx={{ px: 2, mb: 2 }}>
+        {/* ── Compact Metrics Card (always visible) ── */}
+        <Box sx={{ px: 2, mb: 2, flexShrink: 0 }}>
           <Card
             sx={{
               borderRadius: 4,
@@ -631,10 +978,122 @@ export default function RunPage() {
           </Card>
         </Box>
 
+        {/* ── Expanded: 2×2 Skill Metrics Grid ── */}
+        {drawerExpanded && (
+          <Box
+            sx={{
+              flex: 1,
+              overflow: "auto",
+              px: 2,
+              mb: 1,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                color: "text.secondary",
+                mb: 1.5,
+                textAlign: "center",
+              }}
+            >
+              Live Stride Metrics
+            </Typography>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 1.5,
+              }}
+            >
+              {skillMetrics.map((skill) => (
+                <Card
+                  key={skill.id}
+                  sx={{
+                    borderRadius: 3,
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                    position: "relative",
+                    overflow: "visible",
+                  }}
+                >
+                  <CardContent
+                    sx={{
+                      p: 1.5,
+                      "&:last-child": { pb: 1.5 },
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      minHeight: 150,
+                    }}
+                  >
+                    <InfoPopover summary={skill.summary} />
+
+                    <Typography
+                      sx={{
+                        fontSize: "0.6rem",
+                        textTransform: "uppercase",
+                        color: "text.secondary",
+                        letterSpacing: 0.5,
+                        mb: 0.25,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      {skill.label}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.85rem",
+                        mb: 0.5,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      {skill.title}
+                    </Typography>
+
+                    <Box
+                      sx={{
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "100%",
+                      }}
+                    >
+                      <SkillVisualization
+                        skillId={skill.id}
+                        strideData={strideData}
+                        shockHistory={shockHistory}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {/* ── Swipe hint text (when collapsed) ── */}
+        {!drawerExpanded && (
+          <Box sx={{ textAlign: "center", mb: 1 }}>
+            <Typography
+              sx={{
+                fontSize: "0.7rem",
+                color: "rgba(0,0,0,0.35)",
+                fontWeight: 500,
+              }}
+            >
+              Swipe up for stride metrics
+            </Typography>
+          </Box>
+        )}
+
         {/* ── Action Button(s) ── */}
-        <Box sx={{ px: 2, pb: 2 }}>
+        <Box sx={{ px: 2, pb: 2, flexShrink: 0 }}>
           {status === "running" ? (
-            /* ── Pause Button ── */
             <Button
               fullWidth
               variant="contained"
@@ -655,7 +1114,6 @@ export default function RunPage() {
               Pause Run
             </Button>
           ) : (
-            /* ── Resume + Stop Buttons ── */
             <Box
               sx={{
                 display: "flex",
@@ -663,7 +1121,6 @@ export default function RunPage() {
                 alignItems: "center",
               }}
             >
-              {/* Stop */}
               <IconButton
                 onClick={() => setConfirmStop(true)}
                 sx={{
@@ -679,7 +1136,6 @@ export default function RunPage() {
                 <StopIcon sx={{ fontSize: 28 }} />
               </IconButton>
 
-              {/* Resume */}
               <Button
                 fullWidth
                 variant="contained"
