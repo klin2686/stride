@@ -435,7 +435,7 @@ export default function RecordPage() {
 
     try {
       const start = performance.now();
-      const res = await fetch(`${NODE_URL}/health/`, {
+      const res = await fetch(`${NODE_URL}/health`, {
         cache: "no-store",
         signal: AbortSignal.timeout(4000),
       });
