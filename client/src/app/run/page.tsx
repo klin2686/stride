@@ -628,14 +628,13 @@ export default function RunPage() {
     ws.onmessage = (event) => {
       console.log("[Arduino]", event.data);
       try {
-        const data = JSON.parse(event.data as string);
-        if (data.type === "audio_cue" && typeof data.message === "string") {
-          ttsQueueRef.current.push(data.message);
+        const msg = JSON.parse(event.data as string);
+
+        // ── Audio cues ──
+        if (msg.type === "audio_cue" && typeof msg.message === "string") {
+          ttsQueueRef.current.push(msg.message);
           processTtsQueue();
         }
-      } catch {
-        // non-JSON frame — ignore
-        const msg = JSON.parse(event.data);
 
         // ── Telemetry: stride metric moving averages ──
         if (msg?.type === "telemetry" && msg.data) {
@@ -661,7 +660,6 @@ export default function RunPage() {
               shockCalibrationSamples.current.push(d.shock);
 
               if (elapsed >= 60 && shockCalibrationSamples.current.length >= 5) {
-                // Compute average of calibration samples
                 const samples = shockCalibrationSamples.current;
                 const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
                 setShockBaselineComputed(+avg.toFixed(2));
@@ -673,7 +671,8 @@ export default function RunPage() {
             }
           }
         }
-
+      } catch {
+        // non-JSON frame — ignore
       }
     };
     ws.onerror = (err) => {
