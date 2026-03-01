@@ -184,6 +184,10 @@ function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?:
   const isGood = value <= proLine;
   const barColor = isGood ? "#5b9bd5" : "#f97316";
 
+  // Scale font down when the bar is tall so the label fits above it
+  const labelY = 10 + barHeight - fillH - 6;
+  const fontSize = labelY < 12 ? 10 : 14;
+
   return (
     <Box sx={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 2, mt: 2, mb: 1 }}>
       <svg width="120" height="110" viewBox="0 0 120 110">
@@ -203,9 +207,9 @@ function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?:
         <text x="94" y={10 + proY + 4} fontSize="9" fontWeight="600" fill="#22c55e">
           Pro
         </text>
-        {/* Value label */}
-        <text x="60" y={10 + barHeight - fillH - 6} textAnchor="middle"
-          fontSize="14" fontWeight="700" fill={barColor}>
+        {/* Value label — placed inside the bar when it's too tall */}
+        <text x="60" y={labelY < 12 ? 10 + barHeight - fillH + fontSize + 2 : labelY} textAnchor="middle"
+          fontSize={fontSize} fontWeight="700" fill={labelY < 12 ? "#fff" : barColor}>
           {value}ms
         </text>
         {/* Bottom label */}
