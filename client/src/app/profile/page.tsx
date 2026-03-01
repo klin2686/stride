@@ -125,6 +125,11 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
 
+  /* ── Summary stats (fetched from /runs) ── */
+  const [totalRuns, setTotalRuns] = useState(0);
+  const [totalMiles, setTotalMiles] = useState(0);
+  const [displayRunIQ, setDisplayRunIQ] = useState<number | null>(null);
+
   const {
     control,
     handleSubmit,
@@ -188,6 +193,80 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── Fetch run history for summary stats ── */
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    const headers: HeadersInit = {
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "1",
+    };
+
+    // Fetch profile for RunIQ cadence target
+    const profileP = fetch(`${API_BASE}/auth/me`, { headers, cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    // Fetch runs
+    const runsP = fetch(`${API_BASE}/runs`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    Promise.all([profileP, runsP]).then(([profileData, runsData]) => {
+      if (!runsData?.runs?.length) return;
+
+      interface SummaryRun {
+        distance_m: number;
+        avg_cadence: number | null;
+        avg_gct: number | null;
+        avg_shock: number | null;
+        midfoot_pct: number | null;
+      }
+      const runs: SummaryRun[] = runsData.runs;
+
+      setTotalRuns(runs.length);
+      setTotalMiles(
+        runs.reduce((sum: number, r: SummaryRun) => sum + r.distance_m / 1609.344, 0)
+      );
+
+      // RunIQ — same logic as dashboard
+      let heightCm = 175;
+      let gender = 0;
+      if (profileData) {
+        const h = Number(profileData.height);
+        if (h > 0) heightCm = h;
+        if (profileData.gender?.toLowerCase?.() === "female") gender = 1;
+      }
+      const cTarget = Math.round(180 - (heightCm - 175) / 2 + gender * 3);
+
+      const strideRuns = runs.filter((r: SummaryRun) => r.avg_cadence != null);
+      const iqRuns = strideRuns.slice(0, 6);
+      if (iqRuns.length === 0) return;
+
+      const shockVals = iqRuns
+        .map((r: SummaryRun) => r.avg_shock)
+        .filter((v): v is number => v != null);
+      const shockBaseline = shockVals.length > 0 ? Math.min(...shockVals) : 2.0;
+
+      const scores = iqRuns.map((r: SummaryRun) => {
+        const pC = r.avg_cadence != null ? Math.max(0, 50 - 2 * Math.abs(r.avg_cadence - cTarget)) : 0;
+        const pZ = r.midfoot_pct != null ? 50 * (r.midfoot_pct / 100) : 0;
+        const pS = r.avg_gct != null ? Math.max(0, Math.min(50, 50 - (r.avg_gct - 220) / 2)) : 0;
+        let pI = 0;
+        if (r.avg_shock != null && shockBaseline > 0) {
+          const ratio = r.avg_shock / shockBaseline;
+          const heavyPct = ratio > 1.15 ? Math.min(1, (ratio - 1.15) / 0.85) : 0;
+          pI = 50 * (1 - heavyPct);
+        }
+        return Math.round(pC + pZ + pS + pI);
+      });
+
+      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      setDisplayRunIQ(avg);
+    });
   }, []);
 
   /* ── Validation ── */
@@ -615,9 +694,9 @@ export default function ProfilePage() {
         </Typography>
         <Box sx={{ display: "flex", gap: 1.5, mb: 3 }}>
           {[
-            { label: "Total Runs", value: "24" },
-            { label: "Miles", value: "76.4" },
-            { label: "RunIQ", value: "165" },
+            { label: "Total Runs", value: String(totalRuns) },
+            { label: "Miles", value: totalMiles.toFixed(1) },
+            { label: "RunIQ", value: displayRunIQ != null ? String(displayRunIQ) : "—" },
           ].map((stat) => (
             <Card
               key={stat.label}
