@@ -705,11 +705,6 @@ export default function DashboardPage() {
               >
                 RunIQ
               </Typography>
-              {runIQScores.length > 0 && (
-                <Typography sx={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", mt: 0.25 }}>
-                  avg of last {runIQScores.length} run{runIQScores.length !== 1 ? "s" : ""}
-                </Typography>
-              )}
             </Box>
 
             {/* Right – RunIQ trend line */}
