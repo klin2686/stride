@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { speak } from "@/lib/tts";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -110,11 +111,47 @@ export default function RunPage() {
     statusRef.current = status;
   }, [status]);
 
+  /* ── TTS queue: process audio cues one at a time ── */
+  const ttsQueueRef = useRef<string[]>([]);
+  const ttsPlayingRef = useRef(false);
+
+  const processTtsQueue = useCallback(async () => {
+    if (ttsPlayingRef.current) return;
+    const next = ttsQueueRef.current.shift();
+    if (!next) return;
+    ttsPlayingRef.current = true;
+    try {
+      await speak(next);
+    } catch (err: unknown) {
+      console.warn("[TTS]", err);
+    } finally {
+      ttsPlayingRef.current = false;
+      processTtsQueue();
+    }
+  }, []);
+
+  /* ── Welcome greeting on mount ── */
+  useEffect(() => {
+    const username = localStorage.getItem("username") ?? "runner";
+    ttsQueueRef.current.push(`Welcome back ${username}! Ready to run?`);
+    processTtsQueue();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── Arduino WebSocket ── */
   useEffect(() => {
     const ws = new WebSocket(`${NODE_WS_URL}/ws/app`);
     ws.onmessage = (event) => {
       console.log("[Arduino]", event.data);
+      try {
+        const data = JSON.parse(event.data as string);
+        if (data.type === "audio_cue" && typeof data.message === "string") {
+          ttsQueueRef.current.push(data.message);
+          processTtsQueue();
+        }
+      } catch {
+        // non-JSON frame — ignore
+      }
     };
     ws.onerror = (err) => {
       console.error("[Arduino WS error]", err);
@@ -122,7 +159,7 @@ export default function RunPage() {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [processTtsQueue]);
 
   /* ── Timer ── */
   useEffect(() => {
