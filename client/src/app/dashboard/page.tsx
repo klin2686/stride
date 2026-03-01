@@ -342,6 +342,7 @@ function SkillVisualization({
   skillId,
   hasData,
   cadence,
+  goal,
   gct,
   strikeZone,
   heelPct,
@@ -353,6 +354,7 @@ function SkillVisualization({
   skillId: number;
   hasData: boolean;
   cadence: number | null;
+  goal: number;
   gct: number | null;
   strikeZone: "heel" | "midfoot" | "forefoot";
   heelPct: number | null;
@@ -373,7 +375,7 @@ function SkillVisualization({
 
   switch (skillId) {
     case 1:
-      return <TargetRing value={Math.round(cadence ?? 0)} goal={180} />;
+      return <TargetRing value={Math.round(cadence ?? 0)} goal={goal} />;
     case 2:
       return (
         <HeatMapShoe
@@ -392,36 +394,42 @@ function SkillVisualization({
   }
 }
 
-/* ───────────────── Placeholder Trend Line (SVG) ─────────────────── */
-function TrendLine() {
-  // Points that mimic the rising trend in the design
-  const points = [
-    { x: 20, y: 70 },
-    { x: 50, y: 55 },
-    { x: 80, y: 50 },
-    { x: 120, y: 60 },
-    { x: 160, y: 30 },
-    { x: 200, y: 15 },
-  ];
+/* ───────────────── RunIQ Trend Line (SVG) ─────────────────── */
+function TrendLine({ scores }: { scores: number[] }) {
+  // SVG canvas
+  const W = 220, H = 90;
+  const padL = 20, padR = 20, padT = 8, padB = 8;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
 
-  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+  // Map RunIQ (0–200) → SVG y (high score = top = small y)
+  const toY = (s: number) => padT + plotH - (Math.min(s, 200) / 200) * plotH;
+  const toX = (i: number) =>
+    scores.length > 1
+      ? padL + (i / (scores.length - 1)) * plotW
+      : padL + plotW / 2;
+
+  const pts = scores.map((s, i) => ({ x: toX(i), y: toY(s) }));
+  const polyline = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 
   return (
     <svg
-      viewBox="0 0 220 90"
+      viewBox={`0 0 ${W} ${H}`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       style={{ width: "100%", height: "100%" }}
     >
-      <polyline
-        points={polyline}
-        stroke="white"
-        strokeWidth="2.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {points.map((p, i) => (
+      {pts.length > 1 && (
+        <polyline
+          points={polyline}
+          stroke="white"
+          strokeWidth="2.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {pts.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r="4" fill="white" />
       ))}
     </svg>
@@ -448,6 +456,51 @@ function formatDate(iso: string): string {
   });
 }
 
+/* ─────────────── RunIQ Calculator ─────────────── */
+/**
+ * Calculate a single-run RunIQ score (max 200) using the four-module formula:
+ *
+ *   P_C = max(0,  50 - 2 × |C_avg - C_target|)           cadence penalty
+ *   P_Z = 50 × M_%                                         midfoot %
+ *   P_S = max(0, min(50,  50 - (S_avg - 220) / 2))        ground contact
+ *   P_I = 50 × (1 - H_%)                                  shock spike %
+ *   RunIQ = P_C + P_Z + P_S + P_I
+ *
+ * H_% is approximated from avg_shock vs the run-group's minimum shock baseline.
+ */
+function calcRunIQ(
+  run: RunRecord,
+  cTarget: number,   // personalised cadence target (SPM)
+  shockBaseline: number, // minimum avg_shock across the analysed runs
+): number {
+  // P_C — Cadence
+  const pC =
+    run.avg_cadence != null
+      ? Math.max(0, 50 - 2 * Math.abs(run.avg_cadence - cTarget))
+      : 0;
+
+  // P_Z — Landing Zone (midfoot %)
+  const pZ = run.midfoot_pct != null ? 50 * (run.midfoot_pct / 100) : 0;
+
+  // P_S — Ground Spring (contact time)
+  const pS =
+    run.avg_gct != null
+      ? Math.max(0, Math.min(50, 50 - (run.avg_gct - 220) / 2))
+      : 0;
+
+  // P_I — Landing Impact
+  // H_% = what fraction of their impact was "stomping" above the baseline×1.15 limit.
+  // We approximate linearly: 0% heavy at ratio=1.15 → 100% heavy at ratio=2.0.
+  let pI = 0;
+  if (run.avg_shock != null && shockBaseline > 0) {
+    const ratio = run.avg_shock / shockBaseline;
+    const heavyPct = ratio > 1.15 ? Math.min(1, (ratio - 1.15) / 0.85) : 0;
+    pI = 50 * (1 - heavyPct);
+  }
+
+  return Math.round(pC + pZ + pS + pI);
+}
+
 /* ─────────────── Last Run type ─────────────── */
 interface RunRecord {
   id: number;
@@ -470,31 +523,48 @@ export default function DashboardPage() {
   const [username, setUsername] = useState("");
   const [lastRun, setLastRun] = useState<RunRecord | null>(null);
   const [recentRuns, setRecentRuns] = useState<RunRecord[]>([]);
+  // User profile — needed for personalised cadence target in RunIQ
+  const [userHeightCm, setUserHeightCm] = useState<number>(175);
+  const [userGender, setUserGender] = useState<number>(0); // 0 = male, 1 = female
 
   useEffect(() => {
     const stored = localStorage.getItem("username");
     if (stored) setUsername(stored);
 
-    // Fetch the most recent runs (backend returns newest-first)
     const token = localStorage.getItem("access_token");
-    if (token) {
-      fetch(`${API_BASE}/runs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "ngrok-skip-browser-warning": "1",
-        },
+    if (!token) return;
+
+    const headers: HeadersInit = {
+      Authorization: `Bearer ${token}`,
+      "ngrok-skip-browser-warning": "1",
+    };
+
+    // Fetch user profile (height + gender for RunIQ cadence target)
+    fetch(`${API_BASE}/auth/me`, { headers, cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const h = Number(data.height);
+        if (h > 0) setUserHeightCm(h);
+        if (data.gender?.toLowerCase?.() === "female") setUserGender(1);
       })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.runs?.length > 0) {
-            const runs: RunRecord[] = data.runs;
-            setLastRun(runs[0]);                  // newest for the Last Run card
-            setRecentRuns(runs.slice(0, 10));     // up to 10 for skill aggregates
-          }
-        })
-        .catch(() => {});
-    }
+      .catch(() => {});
+
+    // Fetch run history
+    fetch(`${API_BASE}/runs`, { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.runs?.length > 0) {
+          const runs: RunRecord[] = data.runs;
+          setLastRun(runs[0]);              // newest for the Last Run card
+          setRecentRuns(runs.slice(0, 10)); // up to 10 for skill aggregates
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  /* ── Personalised cadence target (same formula as run page) ── */
+  const cTarget = Math.round(180 - (userHeightCm - 175) / 2 + userGender * 3);
 
   /* ── Compute skill aggregates from the last ≤10 runs ── */
   const strideRuns = recentRuns.filter((r) => r.avg_cadence != null);
@@ -530,6 +600,27 @@ export default function DashboardPage() {
   const shockThresh = avgShock != null ? +(avgShock * 1.15).toFixed(2) : 4.0;
 
   const hasStrideData = strideRuns.length > 0;
+
+  /* ── RunIQ: last ≤6 runs with stride data ── */
+  // Take the most recent 6 stride runs (still newest-first from API)
+  const runsForIQ = strideRuns.slice(0, 6);
+
+  // Shock baseline = the minimum avg_shock in those runs (their "best form" reference)
+  const shockValues = runsForIQ
+    .map((r) => r.avg_shock)
+    .filter((v): v is number => v != null);
+  const shockBaseline = shockValues.length > 0 ? Math.min(...shockValues) : 2.0;
+
+  // Calculate RunIQ for each run — reverse so the trend line goes oldest → newest
+  const runIQScores: number[] = [...runsForIQ]
+    .reverse()
+    .map((r) => calcRunIQ(r, cTarget, shockBaseline));
+
+  // Display score = average of those RunIQ values (rounded)
+  const displayRunIQ =
+    runIQScores.length > 0
+      ? Math.round(runIQScores.reduce((a, b) => a + b, 0) / runIQScores.length)
+      : null;
 
   return (
     <Box
@@ -581,16 +672,29 @@ export default function DashboardPage() {
           >
             {/* Left – score + label */}
             <Box sx={{ minWidth: 100 }}>
-              <Typography
-                sx={{
-                  fontSize: "3.5rem",
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  color: "#fff",
-                }}
-              >
-                165
-              </Typography>
+              <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5 }}>
+                <Typography
+                  sx={{
+                    fontSize: "3.5rem",
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    color: "#fff",
+                  }}
+                >
+                  {displayRunIQ ?? "—"}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: "1rem",
+                    fontWeight: 400,
+                    color: "rgba(255,255,255,0.5)",
+                    lineHeight: 1,
+                    mb: 0.25,
+                  }}
+                >
+                  / 200
+                </Typography>
+              </Box>
               <Typography
                 sx={{
                   fontSize: "1rem",
@@ -601,11 +705,16 @@ export default function DashboardPage() {
               >
                 RunIQ
               </Typography>
+              {runIQScores.length > 0 && (
+                <Typography sx={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", mt: 0.25 }}>
+                  avg of last {runIQScores.length} run{runIQScores.length !== 1 ? "s" : ""}
+                </Typography>
+              )}
             </Box>
 
-            {/* Right – trend line */}
+            {/* Right – RunIQ trend line */}
             <Box sx={{ flex: 1, maxWidth: 220, height: 80, ml: 2 }}>
-              <TrendLine />
+              <TrendLine scores={runIQScores} />
             </Box>
           </CardContent>
         </Card>
@@ -741,6 +850,7 @@ export default function DashboardPage() {
                         skillId={skill.id}
                         hasData={hasStrideData}
                         cadence={aggCadence}
+                        goal={cTarget}
                         gct={aggGct}
                         strikeZone={dominantZone}
                         heelPct={aggHeelPct}
