@@ -29,6 +29,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 
 /* ─────────────────────── Constants ─────────────────────── */
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const NODE_URL = process.env.NEXT_PUBLIC_NODE_URL ?? "https://bronson-nonignitable-waylon.ngrok-free.dev";
 const NODE_WS_URL = NODE_URL.replace(/^https?/, NODE_URL.startsWith("https") ? "wss" : "ws");
 
@@ -102,11 +103,97 @@ interface StrideData {
 }
 
 const DEFAULT_STRIDE_DATA: StrideData = {
-  cadence: 172,
-  gct: 235,
-  shock: 1.8,
-  strike: "Midfoot Strike",
+  cadence: 0,
+  gct: 0,
+  shock: 0,
+  strike: "---",
 };
+
+/* ══════════════════ User Profile for Goal Calc ═══════════════════ */
+interface UserProfile {
+  height_cm: number; // centimeters
+  weight_kg: number; // kilograms
+  gender: number; // 0 = male, 1 = female
+}
+
+/* ══════════════════ Goal Targets (computed from profile) ═══════════════════ */
+interface StrideGoals {
+  /** Personalized cadence target (SPM). Ring fills when within ±5 of this. */
+  cadenceTarget: number;
+  /** Lower bound of cadence "green zone" */
+  cadenceLow: number;
+  /** Upper bound of cadence "green zone" */
+  cadenceHigh: number;
+  /** Personalized "pro line" for GCT (ms). Below = blue, above = orange. */
+  gctProLine: number;
+  /** GCT threshold where it turns orange (gctProLine + buffer) */
+  gctWarnLine: number;
+  /** Shock baseline (G) — either rolling average from first 60s or static fallback */
+  shockBaseline: number;
+  /** Shock spike threshold = baseline × 1.15 */
+  shockSpikeThreshold: number;
+}
+
+const DEFAULT_GOALS: StrideGoals = {
+  cadenceTarget: 170,
+  cadenceLow: 165,
+  cadenceHigh: 175,
+  gctProLine: 220,
+  gctWarnLine: 260,
+  shockBaseline: 2.0,
+  shockSpikeThreshold: 2.3,
+};
+
+/**
+ * Calculate personalized stride goals from user profile.
+ *
+ * Cadence: Anchored at 180 SPM for a 175 cm runner.
+ *   - Subtract 1 SPM per 2 cm above 175 cm (taller = longer leg pendulum = slower cadence).
+ *   - Add 1 SPM per 2 cm below 175 cm (shorter = faster cadence).
+ *   - Females get +3 SPM adjustment (shorter average stride length at same height).
+ *   - Target zone is ±5 SPM around the computed value.
+ *   Sources: Heiderscheit et al. (2011), Burns et al. (2019)
+ *
+ * Ground Contact Time: Anchored at 210 ms for a 70 kg / 175 cm runner.
+ *   - +0.5 ms per kg over 70 kg (heavier runners spend slightly more time on ground).
+ *   - +0.4 ms per cm over 175 cm (longer legs = longer ground phase).
+ *   - +5 ms for females (wider pelvis → slightly longer stance phase).
+ *   - "Pro Line" = computed value. Warning at +40 ms above pro line.
+ *   Sources: Lienhard et al. (2014), Nummela et al. (2007)
+ *
+ * Shock: Rolling baseline from first 60 seconds of the run.
+ *   - Captures the runner's "fresh form" G-force.
+ *   - Any spike >15% above baseline indicates form breakdown.
+ *   - Fallback to 2.0 G if no baseline yet.
+ */
+function calculateGoals(profile: UserProfile | null, shockBaselineOverride?: number): StrideGoals {
+  if (!profile) return DEFAULT_GOALS;
+
+  const { height_cm: h, weight_kg: w, gender: g } = profile;
+
+  // ── Cadence ──
+  const cadenceTarget = Math.round(180 - (h - 175) / 2 + g * 3);
+  const cadenceLow = cadenceTarget - 5;
+  const cadenceHigh = cadenceTarget + 5;
+
+  // ── Ground Contact Time ──
+  const gctProLine = Math.round(210 + (w - 70) * 0.5 + (h - 175) * 0.4 + g * 5);
+  const gctWarnLine = gctProLine + 40;
+
+  // ── Shock ──
+  const shockBaseline = shockBaselineOverride ?? 2.0;
+  const shockSpikeThreshold = +(shockBaseline * 1.15).toFixed(2);
+
+  return {
+    cadenceTarget,
+    cadenceLow,
+    cadenceHigh,
+    gctProLine,
+    gctWarnLine,
+    shockBaseline,
+    shockSpikeThreshold,
+  };
+}
 
 /* ═══════════════ Skill Metric Definitions ═══════════════════ */
 interface SkillMetric {
@@ -148,16 +235,29 @@ const skillMetrics: SkillMetric[] = [
 ];
 
 /* ═══════════════ Viz 1: Target Ring (Cadence) — Compact ═══════════════ */
-function TargetRing({ value = 168, goal = 180 }: { value?: number; goal?: number }) {
-  const pct = Math.min(value / goal, 1);
+function TargetRing({
+  value,
+  target,
+  low,
+  high,
+}: {
+  value: number;
+  target: number;
+  low: number;
+  high: number;
+}) {
+  // Ring fills based on how close value is to the target zone [low, high].
+  // 100% fill when value is within the zone.
+  const pct = value === 0 ? 0 : Math.min(value / target, 1);
+  const inZone = value >= low && value <= high;
   const radius = 34;
   const stroke = 7;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - pct);
-  const color = pct >= 0.9 ? "#22c55e" : pct >= 0.7 ? "#5b9bd5" : "#f59e0b";
+  const color = inZone ? "#22c55e" : pct >= 0.85 ? "#5b9bd5" : "#f59e0b";
 
   return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <svg width="90" height="90" viewBox="0 0 90 90">
         <circle cx="45" cy="45" r={radius} fill="none" stroke="#e8edf2" strokeWidth={stroke} />
         <circle
@@ -170,21 +270,24 @@ function TargetRing({ value = 168, goal = 180 }: { value?: number; goal?: number
           style={{ transition: "stroke-dashoffset 0.6s ease" }}
         />
         <text x="45" y="42" textAnchor="middle" fontSize="20" fontWeight="700" fill="#1a1a1a">
-          {value}
+          {value === 0 ? "—" : value}
         </text>
         <text x="45" y="56" textAnchor="middle" fontSize="9" fontWeight="500" fill="#888">
           SPM
         </text>
       </svg>
+      <Typography sx={{ fontSize: "0.55rem", color: "#999", mt: -0.5 }}>
+        Goal: {low}–{high}
+      </Typography>
     </Box>
   );
 }
 
 /* ═══════════════ Viz 2: Heat-Map Shoe (Foot Strike) — Compact ═══════════════ */
-function HeatMapShoe({ zone = "midfoot" }: { zone?: "heel" | "midfoot" | "toe" }) {
-  const heelColor = zone === "heel" ? "#ef4444" : "#e8edf2";
-  const midColor = zone === "midfoot" ? "#22c55e" : "#e8edf2";
-  const toeColor = zone === "toe" ? "#f59e0b" : "#e8edf2";
+function HeatMapShoe({ zone, hasData }: { zone: "heel" | "midfoot" | "toe"; hasData: boolean }) {
+  const heelColor = !hasData ? "#e8edf2" : zone === "heel" ? "#ef4444" : "#e8edf2";
+  const midColor = !hasData ? "#e8edf2" : zone === "midfoot" ? "#22c55e" : "#e8edf2";
+  const toeColor = !hasData ? "#e8edf2" : zone === "toe" ? "#f59e0b" : "#e8edf2";
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -205,27 +308,39 @@ function HeatMapShoe({ zone = "midfoot" }: { zone?: "heel" | "midfoot" | "toe" }
           fontSize: "0.65rem",
           fontWeight: 700,
           mt: 0.25,
-          color: zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b",
+          color: !hasData ? "#bbb" : zone === "midfoot" ? "#22c55e" : zone === "heel" ? "#ef4444" : "#f59e0b",
         }}
       >
-        {zone === "midfoot" ? "✓ Midfoot" : zone === "heel" ? "⚠ Heel" : "⚠ Toe"}
+        {!hasData ? "Waiting…" : zone === "midfoot" ? "✓ Midfoot" : zone === "heel" ? "⚠ Heel" : "⚠ Toe"}
+      </Typography>
+      <Typography sx={{ fontSize: "0.55rem", color: "#999" }}>
+        Goal: Midfoot
       </Typography>
     </Box>
   );
 }
 
 /* ═══════════════ Viz 3: Spring Gauge (Ground Contact Time) — Compact ═══════════════ */
-function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?: number }) {
+function SpringGauge({
+  value,
+  proLine,
+  warnLine,
+}: {
+  value: number;
+  proLine: number;
+  warnLine: number;
+}) {
   const maxVal = 350;
   const barHeight = 60;
-  const fillPct = Math.min(value / maxVal, 1);
+  const fillPct = value === 0 ? 0 : Math.min(value / maxVal, 1);
   const fillH = barHeight * fillPct;
-  const proY = barHeight - (barHeight * (proLine / maxVal));
+  const proY = barHeight - barHeight * (proLine / maxVal);
   const isGood = value <= proLine;
-  const barColor = isGood ? "#5b9bd5" : "#f97316";
+  const isWarn = value > warnLine;
+  const barColor = value === 0 ? "#e8edf2" : isGood ? "#5b9bd5" : isWarn ? "#ef4444" : "#f97316";
 
   return (
-    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <svg width="90" height="85" viewBox="0 0 90 85">
         <rect x="25" y="5" width="30" height={barHeight} rx="5" fill="#e8edf2" />
         <rect
@@ -242,20 +357,32 @@ function SpringGauge({ value = 215, proLine = 200 }: { value?: number; proLine?:
         </text>
         <text x="40" y={5 + barHeight - fillH - 4} textAnchor="middle"
           fontSize="11" fontWeight="700" fill={barColor}>
-          {value}ms
+          {value === 0 ? "—" : `${value}ms`}
         </text>
         <text x="45" y="80" textAnchor="middle" fontSize="8" fontWeight="500" fill="#888">
           Lower is better
         </text>
       </svg>
+      <Typography sx={{ fontSize: "0.55rem", color: "#999", mt: -0.5 }}>
+        Pro: {proLine}ms
+      </Typography>
     </Box>
   );
 }
 
 /* ═══════════════ Viz 4: Shock Waveform (Impact) — Compact ═══════════════ */
-function ShockWaveform({ history }: { history: number[] }) {
-  const points = history.length > 0 ? history : [0.8, 1.5, 0.9, 2.1, 1.2, 0.7, 1.8, 1.0, 2.4, 1.3];
-  const threshold = 2.0;
+function ShockWaveform({ history, threshold }: { history: number[]; threshold: number }) {
+  const points = history.length > 0 ? history : [];
+  if (points.length === 0) {
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 75 }}>
+        <Typography sx={{ fontSize: "0.75rem", color: "#bbb" }}>Waiting for data…</Typography>
+        <Typography sx={{ fontSize: "0.55rem", color: "#999", mt: 0.5 }}>
+          Spike threshold: {threshold.toFixed(1)}G
+        </Typography>
+      </Box>
+    );
+  }
   const w = 120;
   const h = 55;
   const stepX = w / (points.length - 1);
@@ -299,6 +426,9 @@ function ShockWaveform({ history }: { history: number[] }) {
           G-force per step
         </text>
       </svg>
+      <Typography sx={{ fontSize: "0.55rem", color: "#999", mt: -0.5 }}>
+        Spike line: {threshold.toFixed(1)}G
+      </Typography>
     </Box>
   );
 }
@@ -349,22 +479,46 @@ function InfoPopover({ summary }: { summary: string }) {
 }
 
 /* ═══════════════ Skill Visualization Router ═══════════════ */
-function SkillVisualization({ skillId, strideData, shockHistory }: { skillId: number; strideData: StrideData; shockHistory: number[] }) {
-  const strikeZone = strideData.strike.toLowerCase().includes("heel")
-    ? "heel"
-    : strideData.strike.toLowerCase().includes("midfoot") || strideData.strike.toLowerCase().includes("mid")
-    ? "midfoot"
+function SkillVisualization({
+  skillId,
+  strideData,
+  shockHistory,
+  goals,
+}: {
+  skillId: number;
+  strideData: StrideData;
+  shockHistory: number[];
+  goals: StrideGoals;
+}) {
+  const strike = strideData.strike.toLowerCase();
+  const strikeZone: "heel" | "midfoot" | "toe" =
+    strike.includes("heel") ? "heel"
+    : strike.includes("midfoot") || strike.includes("mid") ? "midfoot"
+    : strike === "---" ? "midfoot" // default before data arrives
     : "toe";
 
   switch (skillId) {
     case 1:
-      return <TargetRing value={Math.round(strideData.cadence)} />;
+      return (
+        <TargetRing
+          value={Math.round(strideData.cadence)}
+          target={goals.cadenceTarget}
+          low={goals.cadenceLow}
+          high={goals.cadenceHigh}
+        />
+      );
     case 2:
-      return <HeatMapShoe zone={strikeZone} />;
+      return <HeatMapShoe zone={strikeZone} hasData={strideData.strike !== "---"} />;
     case 3:
-      return <SpringGauge value={Math.round(strideData.gct)} />;
+      return (
+        <SpringGauge
+          value={Math.round(strideData.gct)}
+          proLine={goals.gctProLine}
+          warnLine={goals.gctWarnLine}
+        />
+      );
     case 4:
-      return <ShockWaveform history={shockHistory} />;
+      return <ShockWaveform history={shockHistory} threshold={goals.shockSpikeThreshold} />;
     default:
       return null;
   }
@@ -391,9 +545,19 @@ export default function RunPage() {
   const [drawerExpanded, setDrawerExpanded] = useState(false);
   const touchStartRef = useRef<number | null>(null);
 
+  /* ── User profile & computed goals ── */
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [shockBaselineComputed, setShockBaselineComputed] = useState<number | null>(null);
+  const shockCalibrationSamples = useRef<number[]>([]); // first 60s of shock readings
+  const shockCalibrationDone = useRef(false);
+  const runStartTime = useRef(Date.now());
+
   /* ── Stride sensor data (from Arduino WebSocket) ── */
   const [strideData, setStrideData] = useState<StrideData>(DEFAULT_STRIDE_DATA);
   const [shockHistory, setShockHistory] = useState<number[]>([]);
+
+  /* ── Computed goals (recalculated when profile or shock baseline changes) ── */
+  const goals = calculateGoals(userProfile, shockBaselineComputed ?? undefined);
 
   /* ── Refs ── */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -408,33 +572,77 @@ export default function RunPage() {
     statusRef.current = status;
   }, [status]);
 
+  /* ── Fetch user profile on mount (for goal calculations) ── */
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    fetch(`${API_BASE}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "ngrok-skip-browser-warning": "1",
+      },
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const h = Number(data.height);
+        const w = Number(data.weight);
+        if (h > 0 && w > 0) {
+          const g = data.gender?.toLowerCase?.() === "female" ? 1 : 0;
+          setUserProfile({ height_cm: h, weight_kg: w, gender: g });
+          console.log("[Goals] Profile loaded:", { h, w, g });
+        }
+      })
+      .catch((err) => console.warn("[Goals] Failed to load profile:", err));
+  }, []);
+
   /* ── Arduino WebSocket ── */
   useEffect(() => {
     const ws = new WebSocket(`${NODE_WS_URL}/ws/app`);
     ws.onmessage = (event) => {
       console.log("[Arduino]", event.data);
-      // Try to parse stride data from Arduino
       try {
         const msg = JSON.parse(event.data);
-        if (msg?.data) {
+
+        // ── Telemetry: stride metric moving averages ──
+        if (msg?.type === "telemetry" && msg.data) {
           const d = msg.data;
-          if (typeof d.cadence === "number") {
-            setStrideData((prev) => ({
-              ...prev,
-              cadence: d.cadence,
-              gct: d.gct ?? prev.gct,
-              shock: d.shock ?? prev.shock,
-              strike: d.strike ?? prev.strike,
-            }));
-            // Append shock to history (keep last 20 points)
-            if (typeof d.shock === "number") {
-              setShockHistory((prev) => {
-                const next = [...prev, d.shock];
-                return next.length > 20 ? next.slice(-20) : next;
-              });
+          setStrideData((prev) => ({
+            cadence: typeof d.cadence === "number" ? d.cadence : prev.cadence,
+            gct: typeof d.gct === "number" ? d.gct : prev.gct,
+            shock: typeof d.shock === "number" ? d.shock : prev.shock,
+            strike: typeof d.strike === "string" ? d.strike : prev.strike,
+          }));
+
+          // ── Shock rolling baseline (first 60 seconds) ──
+          if (typeof d.shock === "number") {
+            // Append to waveform history (keep last 20 points)
+            setShockHistory((prev) => {
+              const next = [...prev, d.shock];
+              return next.length > 20 ? next.slice(-20) : next;
+            });
+
+            // Build baseline from first 60 seconds of data
+            if (!shockCalibrationDone.current) {
+              const elapsed = (Date.now() - runStartTime.current) / 1000;
+              shockCalibrationSamples.current.push(d.shock);
+
+              if (elapsed >= 60 && shockCalibrationSamples.current.length >= 5) {
+                // Compute average of calibration samples
+                const samples = shockCalibrationSamples.current;
+                const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+                setShockBaselineComputed(+avg.toFixed(2));
+                shockCalibrationDone.current = true;
+                console.log(
+                  `[Goals] Shock baseline established: ${avg.toFixed(2)}G from ${samples.length} samples`
+                );
+              }
             }
           }
         }
+
       } catch {
         // Not JSON — ignore
       }
@@ -445,6 +653,7 @@ export default function RunPage() {
     return () => {
       ws.close();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ── Timer ── */
@@ -1067,6 +1276,7 @@ export default function RunPage() {
                         skillId={skill.id}
                         strideData={strideData}
                         shockHistory={shockHistory}
+                        goals={goals}
                       />
                     </Box>
                   </CardContent>
