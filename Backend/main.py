@@ -46,11 +46,10 @@ class LoginRequest(BaseModel):
 
 
 class StrideStats(BaseModel):
-    cadence: str
-    impact_asymetry: str
-    breaking_force: str
-    ankle_roll: str
-    ground_contact: str
+    cadence: float       # steps per minute
+    gct: float           # ground contact time in ms
+    shock: float         # impact shock in g
+    strike: str          # foot strike type, e.g. "Forefoot Strike"
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)) -> User:
@@ -191,16 +190,25 @@ def update_profile(
 @app.post("/stats/update")
 def update(body: StrideStats, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
+    Receive stride statistics from the Arduino sensor and persist them.
+
     Request format:
     {
-        "cadence": <cadence: str>,
-        "impact_asymetry": <impact_asymetry: str>,
-        "breaking_force": <breaking_force: str>,
-        "ankle_roll": <ankle_roll: str>,
-        "ground_contact": <ground_contact: str>,
+        "cadence": <cadence: float>,   // steps per minute
+        "gct": <gct: float>,           // ground contact time in ms
+        "shock": <shock: float>,       // impact shock in g
+        "strike": <strike: str>        // e.g. "Forefoot Strike"
     }
     """
     current_user.stats = json.dumps(body.model_dump())
     db.commit()
     db.refresh(current_user)
     return {"message": "Stats updated successfully"}
+
+
+@app.get("/stats/me")
+def get_stats(current_user: User = Depends(get_current_user)):
+    """Return the stored stride stats for the authenticated user."""
+    if not current_user.stats:
+        return {"stats": None}
+    return {"stats": json.loads(current_user.stats)}
