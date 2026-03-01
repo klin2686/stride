@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
@@ -10,10 +12,14 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import Divider from "@mui/material/Divider";
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import StopIcon from "@mui/icons-material/Stop";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import SpeedIcon from "@mui/icons-material/Speed";
+import StraightenIcon from "@mui/icons-material/Straighten";
 import Map, { Marker, Source, Layer, type MapRef } from "react-map-gl/mapbox";
 import type { LayerProps } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -308,7 +314,7 @@ export default function RunPage() {
         width: "100%",
         height: "100dvh",
         overflow: "hidden",
-        bgcolor: "#000",
+        bgcolor: "#f2f2f2",
       }}
     >
       {/* ═══════════ Geo Debug Banner ═══════════ */}
@@ -319,20 +325,23 @@ export default function RunPage() {
           left: 8,
           right: 8,
           zIndex: 20,
-          bgcolor: "rgba(0,0,0,0.75)",
-          color: "#fff",
+          bgcolor: "rgba(255,255,255,0.92)",
+          backdropFilter: "blur(8px)",
+          color: "#1a1a1a",
           px: 1.5,
           py: 0.75,
-          borderRadius: 1,
-          fontSize: 12,
+          borderRadius: 2,
+          fontSize: 11,
           fontFamily: "monospace",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          border: "1px solid rgba(0,0,0,0.06)",
         }}
       >
         GPS: {geoDebug}
       </Box>
 
-      {/* ═══════════ Full-Screen Map ═══════════ */}
-      <Box sx={{ position: "absolute", inset: 0 }}>
+      {/* ═══════════ Map Area ═══════════ */}
+      <Box sx={{ position: "absolute", inset: 0, bottom: 280 }}>
         <Map
           ref={mapRef}
           initialViewState={{
@@ -340,7 +349,7 @@ export default function RunPage() {
             latitude: mapCenter.latitude,
             zoom: DEFAULT_ZOOM,
           }}
-          mapStyle="mapbox://styles/mapbox/dark-v11"
+          mapStyle="mapbox://styles/mapbox/light-v11"
           mapboxAccessToken={MAPBOX_TOKEN}
           style={{ width: "100%", height: "100%" }}
           attributionControl={false}
@@ -373,7 +382,7 @@ export default function RunPage() {
                   width: 40,
                   height: 40,
                   borderRadius: "50%",
-                  bgcolor: "rgba(66,133,244,0.2)",
+                  bgcolor: "rgba(91,155,213,0.2)",
                   animation: "gps-pulse 2s ease-out infinite",
                   "@keyframes gps-pulse": {
                     "0%": {
@@ -393,9 +402,9 @@ export default function RunPage() {
                   width: 18,
                   height: 18,
                   borderRadius: "50%",
-                  bgcolor: "#4285F4",
+                  bgcolor: "#5b9bd5",
                   border: "3px solid #fff",
-                  boxShadow: "0 0 12px rgba(66,133,244,0.6)",
+                  boxShadow: "0 0 12px rgba(91,155,213,0.5)",
                   zIndex: 1,
                 }}
               />
@@ -419,12 +428,21 @@ export default function RunPage() {
           py: 1.5,
         }}
       >
-        <IconButton onClick={handleBack} sx={{ color: "#fff" }}>
-          <KeyboardArrowDownIcon sx={{ fontSize: 32 }} />
+        <IconButton
+          onClick={handleBack}
+          sx={{
+            color: "#1a1a1a",
+            bgcolor: "rgba(255,255,255,0.85)",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.95)" },
+          }}
+        >
+          <KeyboardArrowDownIcon sx={{ fontSize: 28 }} />
         </IconButton>
       </Box>
 
-      {/* ═══════════ Bottom Metrics Sheet ═══════════ */}
+      {/* ═══════════ Bottom Metrics Panel ═══════════ */}
       <Box
         sx={{
           position: "absolute",
@@ -432,10 +450,13 @@ export default function RunPage() {
           left: 0,
           right: 0,
           zIndex: 10,
-          bgcolor: "#1c1c1e",
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
+          bgcolor: "#f2f2f2",
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
           pb: "env(safe-area-inset-bottom, 16px)",
+          maxWidth: 600,
+          mx: "auto",
         }}
       >
         {/* ── Drag handle ── */}
@@ -444,7 +465,7 @@ export default function RunPage() {
             display: "flex",
             justifyContent: "center",
             pt: 1.5,
-            pb: 1,
+            pb: 0.5,
           }}
         >
           <Box
@@ -452,139 +473,193 @@ export default function RunPage() {
               width: 36,
               height: 4,
               borderRadius: 2,
-              bgcolor: "rgba(255,255,255,0.25)",
+              bgcolor: "rgba(0,0,0,0.12)",
             }}
           />
         </Box>
 
-        {/* ── Run label ── */}
-        <Typography
-          sx={{
-            textAlign: "center",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: "0.95rem",
-            mb: 2,
-          }}
-        >
-          Run
-        </Typography>
-
-        {/* ── Metrics Grid ── */}
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-around",
-            alignItems: "flex-start",
-            px: 2,
-            pb: 2.5,
-          }}
-        >
-          {/* Time */}
-          <Box sx={{ textAlign: "center", flex: 1 }}>
+        {/* ── Status pill ── */}
+        <Box sx={{ display: "flex", justifyContent: "center", mb: 1.5 }}>
+          <Box
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.75,
+              px: 2,
+              py: 0.5,
+              borderRadius: 3,
+              bgcolor: status === "running" ? "rgba(46,125,50,0.08)" : "rgba(237,108,2,0.08)",
+            }}
+          >
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                bgcolor: status === "running" ? "#2e7d32" : "#ed6c02",
+                animation: status === "running" ? "statusPulse 1.5s ease-in-out infinite" : "none",
+                "@keyframes statusPulse": {
+                  "0%, 100%": { opacity: 1 },
+                  "50%": { opacity: 0.4 },
+                },
+              }}
+            />
             <Typography
               sx={{
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: "2rem",
-                lineHeight: 1.1,
-                fontVariantNumeric: "tabular-nums",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                color: status === "running" ? "#2e7d32" : "#ed6c02",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
               }}
             >
-              {formatTime(elapsedSeconds)}
-            </Typography>
-            <Typography
-              sx={{
-                color: "rgba(255,255,255,0.55)",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                mt: 0.5,
-              }}
-            >
-              Time
-            </Typography>
-          </Box>
-
-          {/* Pace */}
-          <Box sx={{ textAlign: "center", flex: 1 }}>
-            <Typography
-              sx={{
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: "2rem",
-                lineHeight: 1.1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {pace}
-            </Typography>
-            <Typography
-              sx={{
-                color: "rgba(255,255,255,0.55)",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                mt: 0.5,
-              }}
-            >
-              Split avg. pace (/mi)
-            </Typography>
-          </Box>
-
-          {/* Distance */}
-          <Box sx={{ textAlign: "center", flex: 1 }}>
-            <Typography
-              sx={{
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: "2rem",
-                lineHeight: 1.1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {distanceMiles.toFixed(2)}
-            </Typography>
-            <Typography
-              sx={{
-                color: "rgba(255,255,255,0.55)",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                mt: 0.5,
-              }}
-            >
-              Distance (mi)
+              {status === "running" ? "Running" : "Paused"}
             </Typography>
           </Box>
         </Box>
 
+        {/* ── Metrics Cards ── */}
+        <Box sx={{ px: 2, mb: 2 }}>
+          <Card
+            sx={{
+              borderRadius: 4,
+              boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+            }}
+          >
+            <CardContent sx={{ px: 0, py: 0, "&:last-child": { pb: 0 } }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "stretch",
+                }}
+              >
+                {/* Time */}
+                <Box sx={{ flex: 1, textAlign: "center", py: 2, px: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "center", mb: 0.75 }}>
+                    <AccessTimeIcon sx={{ fontSize: 18, color: "#5b9bd5" }} />
+                  </Box>
+                  <Typography
+                    sx={{
+                      color: "#1a1a1a",
+                      fontWeight: 800,
+                      fontSize: "1.75rem",
+                      lineHeight: 1.1,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatTime(elapsedSeconds)}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: "0.7rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      mt: 0.5,
+                    }}
+                  >
+                    Time
+                  </Typography>
+                </Box>
+
+                <Divider orientation="vertical" flexItem />
+
+                {/* Pace */}
+                <Box sx={{ flex: 1, textAlign: "center", py: 2, px: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "center", mb: 0.75 }}>
+                    <SpeedIcon sx={{ fontSize: 18, color: "#5b9bd5" }} />
+                  </Box>
+                  <Typography
+                    sx={{
+                      color: "#1a1a1a",
+                      fontWeight: 800,
+                      fontSize: "1.75rem",
+                      lineHeight: 1.1,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {pace}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: "0.7rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      mt: 0.5,
+                    }}
+                  >
+                    Pace (/mi)
+                  </Typography>
+                </Box>
+
+                <Divider orientation="vertical" flexItem />
+
+                {/* Distance */}
+                <Box sx={{ flex: 1, textAlign: "center", py: 2, px: 1 }}>
+                  <Box sx={{ display: "flex", justifyContent: "center", mb: 0.75 }}>
+                    <StraightenIcon sx={{ fontSize: 18, color: "#5b9bd5" }} />
+                  </Box>
+                  <Typography
+                    sx={{
+                      color: "#1a1a1a",
+                      fontWeight: 800,
+                      fontSize: "1.75rem",
+                      lineHeight: 1.1,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {distanceMiles.toFixed(2)}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      color: "text.secondary",
+                      fontSize: "0.7rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.3,
+                      mt: 0.5,
+                    }}
+                  >
+                    Distance (mi)
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
+
         {/* ── Action Button(s) ── */}
-        <Box sx={{ px: 3, pb: 2 }}>
+        <Box sx={{ px: 2, pb: 2 }}>
           {status === "running" ? (
             /* ── Pause Button ── */
             <Button
               fullWidth
               variant="contained"
               onClick={handlePause}
-              startIcon={<PauseIcon sx={{ fontSize: 28 }} />}
+              startIcon={<PauseIcon sx={{ fontSize: 24 }} />}
               sx={{
-                py: 2,
-                borderRadius: "50px",
-                fontSize: "1.15rem",
-                fontWeight: 800,
+                py: 1.75,
+                borderRadius: 3,
+                fontSize: "1rem",
+                fontWeight: 700,
                 textTransform: "none",
-                bgcolor: "#ff5722",
+                bgcolor: "#5b9bd5",
                 color: "#fff",
-                boxShadow: "0 4px 24px rgba(255,87,34,0.45)",
-                "&:hover": { bgcolor: "#e64a19" },
+                boxShadow: "0 4px 20px rgba(91,155,213,0.35)",
+                "&:hover": { bgcolor: "#4a8bc4" },
               }}
             >
-              Pause
+              Pause Run
             </Button>
           ) : (
             /* ── Resume + Stop Buttons ── */
             <Box
               sx={{
                 display: "flex",
-                gap: 2,
+                gap: 1.5,
                 alignItems: "center",
               }}
             >
@@ -592,15 +667,16 @@ export default function RunPage() {
               <IconButton
                 onClick={() => setConfirmStop(true)}
                 sx={{
-                  width: 60,
-                  height: 60,
-                  bgcolor: "#d32f2f",
-                  color: "#fff",
-                  boxShadow: "0 4px 16px rgba(211,47,47,0.4)",
-                  "&:hover": { bgcolor: "#b71c1c" },
+                  width: 56,
+                  height: 56,
+                  bgcolor: "#fff",
+                  color: "#d32f2f",
+                  border: "2px solid #d32f2f",
+                  boxShadow: "0 2px 12px rgba(211,47,47,0.15)",
+                  "&:hover": { bgcolor: "rgba(211,47,47,0.04)" },
                 }}
               >
-                <StopIcon sx={{ fontSize: 32 }} />
+                <StopIcon sx={{ fontSize: 28 }} />
               </IconButton>
 
               {/* Resume */}
@@ -608,16 +684,16 @@ export default function RunPage() {
                 fullWidth
                 variant="contained"
                 onClick={handleResume}
-                startIcon={<PlayArrowIcon sx={{ fontSize: 28 }} />}
+                startIcon={<PlayArrowIcon sx={{ fontSize: 24 }} />}
                 sx={{
-                  py: 2,
-                  borderRadius: "50px",
-                  fontSize: "1.15rem",
-                  fontWeight: 800,
+                  py: 1.75,
+                  borderRadius: 3,
+                  fontSize: "1rem",
+                  fontWeight: 700,
                   textTransform: "none",
                   bgcolor: "#2e7d32",
                   color: "#fff",
-                  boxShadow: "0 4px 24px rgba(46,125,50,0.45)",
+                  boxShadow: "0 4px 20px rgba(46,125,50,0.35)",
                   "&:hover": { bgcolor: "#1b5e20" },
                 }}
               >
@@ -635,22 +711,23 @@ export default function RunPage() {
         PaperProps={{
           sx: {
             borderRadius: 4,
-            bgcolor: "#1c1c1e",
-            color: "#fff",
+            bgcolor: "#fff",
+            color: "#1a1a1a",
             maxWidth: 340,
             width: "100%",
             mx: 2,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 700, fontSize: "1.15rem" }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: "1.15rem", color: "#1a1a1a" }}>
           End Run?
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.7)" }}>
+          <Typography sx={{ fontSize: "0.9rem", color: "text.secondary", lineHeight: 1.6 }}>
             Your run will be saved with{" "}
-            <strong>{distanceMiles.toFixed(2)} mi</strong> in{" "}
-            <strong>{formatTime(elapsedSeconds)}</strong>.
+            <strong style={{ color: "#1a1a1a" }}>{distanceMiles.toFixed(2)} mi</strong> in{" "}
+            <strong style={{ color: "#1a1a1a" }}>{formatTime(elapsedSeconds)}</strong>.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
@@ -659,7 +736,7 @@ export default function RunPage() {
             sx={{
               textTransform: "none",
               fontWeight: 600,
-              color: "rgba(255,255,255,0.6)",
+              color: "text.secondary",
             }}
           >
             Cancel
