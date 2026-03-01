@@ -229,10 +229,15 @@ function ShockWaveform({
   points?: number[];
   threshold?: number;
 }) {
-  const w = 260;
-  const h = 80;
+  // Padding so dots / labels at the edges don't clip
+  const padL = 8;
+  const padR = 28; // room for G-axis labels on the right
+  const padT = 14; // room for "limit" text above threshold line
+  const plotW = 230;
+  const plotH = 70;
+  const svgW = padL + plotW + padR;
+  const svgH = padT + plotH + 24; // 24 for bottom label
 
-  // Need at least 2 points to draw a line; pad with nulls shown as dots
   if (points.length === 0) {
     return (
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 2, mb: 1 }}>
@@ -243,35 +248,34 @@ function ShockWaveform({
     );
   }
 
-  const maxG = Math.max(...points, threshold) * 1.1;
-  const stepX = points.length > 1 ? w / (points.length - 1) : w;
-  const yOf = (v: number) => h - (v / maxG) * h;
+  const maxG = Math.max(...points, threshold) * 1.15;
+  const stepX = points.length > 1 ? plotW / (points.length - 1) : 0;
+  const yOf = (v: number) => padT + plotH - (v / maxG) * plotH;
   const thresholdY = yOf(threshold);
 
   const pathD = points
-    .map((v, i) => `${i === 0 ? "M" : "L"}${i * stepX},${yOf(v)}`)
+    .map((v, i) => `${i === 0 ? "M" : "L"}${padL + i * stepX},${yOf(v)}`)
     .join(" ");
 
-  // Y-axis labels: 0, midpoint, max
   const gridVals = [0, +(maxG / 2).toFixed(1), +maxG.toFixed(1)];
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 2, mb: 1 }}>
-      <svg width="260" height="110" viewBox="0 0 260 110" style={{ maxWidth: "100%" }}>
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: "100%" }}>
         {/* Grid lines */}
         {gridVals.map((g) => {
           const y = yOf(g);
           return (
             <g key={g}>
-              <line x1="0" y1={y} x2={w} y2={y} stroke="#eee" strokeWidth="1" />
-              <text x={w + 4} y={y + 4} fontSize="8" fill="#bbb">{g}G</text>
+              <line x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="#eee" strokeWidth="1" />
+              <text x={padL + plotW + 4} y={y + 4} fontSize="8" fill="#bbb">{g}G</text>
             </g>
           );
         })}
         {/* Threshold line */}
-        <line x1="0" y1={thresholdY} x2={w} y2={thresholdY}
+        <line x1={padL} y1={thresholdY} x2={padL + plotW} y2={thresholdY}
           stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5,3" opacity="0.6" />
-        <text x="2" y={thresholdY - 3} fontSize="8" fill="#ef4444" opacity="0.8">limit</text>
+        <text x={padL + 2} y={Math.max(padT, thresholdY - 3)} fontSize="8" fill="#ef4444" opacity="0.8">limit</text>
         {/* Waveform line */}
         {points.length > 1 && (
           <path d={pathD} fill="none" stroke="#5b9bd5" strokeWidth="2.5"
@@ -279,7 +283,7 @@ function ShockWaveform({
         )}
         {/* Dots */}
         {points.map((v, i) => {
-          const x = i * stepX;
+          const x = padL + i * stepX;
           const y = yOf(v);
           const isHigh = v >= threshold;
           return (
@@ -288,7 +292,7 @@ function ShockWaveform({
           );
         })}
         {/* Bottom label */}
-        <text x={w / 2} y="105" textAnchor="middle" fontSize="10" fontWeight="500" fill="#888">
+        <text x={padL + plotW / 2} y={padT + plotH + 18} textAnchor="middle" fontSize="10" fontWeight="500" fill="#888">
           Avg impact per run (G-force) · {points.length} run{points.length !== 1 ? "s" : ""}
         </text>
       </svg>
