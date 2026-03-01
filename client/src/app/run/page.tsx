@@ -959,27 +959,6 @@ export default function RunPage() {
       }}
     >
       {/* ═══════════ Geo Debug Banner ═══════════ */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 8,
-          left: 8,
-          right: 8,
-          zIndex: 20,
-          bgcolor: "rgba(255,255,255,0.92)",
-          backdropFilter: "blur(8px)",
-          color: "#1a1a1a",
-          px: 1.5,
-          py: 0.75,
-          borderRadius: 2,
-          fontSize: 11,
-          fontFamily: "monospace",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          border: "1px solid rgba(0,0,0,0.06)",
-        }}
-      >
-        GPS: {geoDebug}
-      </Box>
 
       {/* ═══════════ Map Area ═══════════ */}
       <Box
