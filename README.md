@@ -1,5 +1,10 @@
 # Stride
 
+## Video Demo
+[![Watch the demo](<img width="787" height="555" alt="Screenshot 2026-04-13 at 2 20 02 AM" src="https://github.com/user-attachments/assets/6de56174-72cb-4925-8b25-8f62be2d4774" />
+)](https://www.youtube.com/watch?v=lfB2SNkqhy4)
+<p align="center">Click the thumbnail to watch our demo on YouTube</p>
+
 ## What it does
 
 Stride uses a high-frequency Modulino sensor (accelerometer + gyroscope) strapped to the runner's shoe to capture the micro-mechanics of every stride. The app processes this raw data into four user-friendly insights:
