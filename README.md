@@ -1,8 +1,7 @@
 # Stride
 
 ## Video Demo
-[![Watch the demo](src="https://github.com/user-attachments/assets/6de56174-72cb-4925-8b25-8f62be2d4774">
-)](https://www.youtube.com/watch?v=lfB2SNkqhy4)
+[![Watch the demo]](https://www.youtube.com/watch?v=Kb_Vfj9-VP8&t=2s)
 <p align="center">Click the thumbnail to watch our demo on YouTube</p>
 
 ## What it does
