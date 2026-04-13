@@ -1,7 +1,7 @@
 # Stride
 
 ## Video Demo
-[![Watch the demo](<img width="787" height="555" alt="Screenshot 2026-04-13 at 2 20 02 AM" src="https://github.com/user-attachments/assets/6de56174-72cb-4925-8b25-8f62be2d4774" />
+[![Watch the demo](src="https://github.com/user-attachments/assets/6de56174-72cb-4925-8b25-8f62be2d4774">
 )](https://www.youtube.com/watch?v=lfB2SNkqhy4)
 <p align="center">Click the thumbnail to watch our demo on YouTube</p>
 
