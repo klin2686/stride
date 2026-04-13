@@ -1,8 +1,7 @@
 # Stride
 
 ## Video Demo
-[![Watch the demo]](https://www.youtube.com/watch?v=Kb_Vfj9-VP8&t=2s)
-<p align="center">Click the thumbnail to watch our demo on YouTube</p>
+[[Watch the demo]](https://www.youtube.com/watch?v=Kb_Vfj9-VP8&t=2s)
 
 ## What it does
 
